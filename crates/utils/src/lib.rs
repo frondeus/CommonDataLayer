@@ -8,6 +8,7 @@ pub mod psql;
 pub mod query_utils;
 pub mod status_endpoints;
 pub mod task_limiter;
+pub mod task_queue;
 
 pub fn abort_on_poison<T>(_e: PoisonError<T>) -> T {
     error!("Encountered mutex poisoning. Aborting.");
