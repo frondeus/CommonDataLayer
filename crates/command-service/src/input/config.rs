@@ -7,7 +7,7 @@ pub enum InputConfig {
 pub struct MessageQueueConfig {
     pub consumer_tag: String,
     pub connection_string: String,
-    pub queue_name: String,
+    pub queue_names: Vec<String>,
     pub task_limit: usize,
 }
 

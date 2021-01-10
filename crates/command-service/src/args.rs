@@ -66,10 +66,13 @@ impl Args {
                     .connection_string
                     .clone()
                     .ok_or(MissingConfigError("Connection string"))?,
-                queue_name: input_args
+                queue_names: input_args
                     .queue_name
                     .clone()
-                    .ok_or(MissingConfigError("Topic"))?,
+                    .ok_or(MissingConfigError("Topic"))?
+                    .split(",")
+                    .map(String::from)
+                    .collect(),
                 task_limit: input_args.task_limit,
             }),
             IngestionMethod::GRpc => InputConfig::GRpc(GRpcConfig {

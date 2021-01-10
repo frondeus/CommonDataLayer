@@ -3,10 +3,11 @@ use crate::{
     communication::MessageRouter,
     input::{Error, MessageQueueConfig},
 };
+use futures::{Stream, stream::select_all};
+use futures::stream::StreamExt; 
 use log::{error, trace};
 use std::process;
 use tokio::pin;
-use tokio::stream::StreamExt;
 use utils::message_types::BorrowedInsertMessage;
 use utils::messaging_system::consumer::CommonConsumer;
 use utils::messaging_system::message::CommunicationMessage;
@@ -15,20 +16,25 @@ use utils::metrics::counter;
 use utils::task_limiter::TaskLimiter;
 
 pub struct MessageQueueInput<P: OutputPlugin> {
-    consumer: CommonConsumer,
+    consumer: Vec<CommonConsumer>,
     message_router: MessageRouter<P>,
     task_limiter: TaskLimiter,
 }
 
 impl<P: OutputPlugin> MessageQueueInput<P> {
     pub async fn new(config: MessageQueueConfig, message_router: MessageRouter<P>) -> Result<Self, Error> {
-        let consumer =
-            CommonConsumer::new_rabbit(&config.connection_string, &config.consumer_tag, &config.queue_name)
-                .await
-                .map_err(Error::ConsumerCreationFailed)?;
+
+        let mut consumers = Vec::new();
+        for queue_name in config.queue_names {
+            let consumer =
+                CommonConsumer::new_rabbit(&config.connection_string, &config.consumer_tag, &queue_name)
+                    .await
+                    .map_err(Error::ConsumerCreationFailed)?;
+            consumers.push(consumer);
+        }
 
         Ok(Self {
-            consumer,
+            consumer:consumers,
             message_router,
             task_limiter: TaskLimiter::new(config.task_limit),
         })
@@ -66,8 +72,14 @@ impl<P: OutputPlugin> MessageQueueInput<P> {
     }
 
     pub async fn listen(self) -> Result<(), Error> {
-        let consumer = self.consumer.leak();
-        let message_stream = consumer.consume().await;
+        let mut streams = Vec::new();
+        for consumer in self.consumer {
+            let consumer = consumer.leak();
+            let stream = consumer.consume().await;
+            streams.push(stream);
+        };
+        let message_stream = select_all(streams.into_iter().map(Box::pin));
+        
         pin!(message_stream);
 
         while let Some(message) = message_stream.next().await {
