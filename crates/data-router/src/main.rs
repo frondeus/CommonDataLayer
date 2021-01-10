@@ -33,7 +33,9 @@ struct Config {
     #[structopt(long, env)]
     pub kafka_brokers: String,
     #[structopt(long, env)]
-    pub kafka_error_channel: String,
+    pub rabbit_connection_string: String,
+    #[structopt(long, env)]
+    pub rabbit_error_queue: String,
     #[structopt(long, env)]
     pub schema_registry_addr: String,
     #[structopt(long, env)]
@@ -53,7 +55,7 @@ async fn main() -> anyhow::Result<()> {
     )
     .await?;
     let producer = Arc::new(
-        CommonPublisher::new_kafka(&config.kafka_brokers)
+        CommonPublisher::new_rabbit(&config.rabbit_connection_string)
             .await
             .unwrap(),
     );
@@ -62,7 +64,7 @@ async fn main() -> anyhow::Result<()> {
     let message_stream = consumer.consume().await;
     pin!(message_stream);
 
-    let kafka_error_channel = Arc::new(config.kafka_error_channel);
+    let kafka_error_channel = Arc::new(config.rabbit_error_queue);
     let schema_registry_addr = Arc::new(config.schema_registry_addr);
 
     while let Some(message) = message_stream.next().await {
@@ -104,11 +106,12 @@ async fn handle_message(
         let payload = BorrowedInsertMessage {
             object_id: insert_message.object_id,
             schema_id: insert_message.schema_id,
+            order_group_id: "TODO:".to_string(),// TODO:
             timestamp: current_timestamp(),
             data: insert_message.data,
         };
 
-        let key = payload.object_id.to_string();
+        let key = payload.order_group_id.to_string();
         send_message(
             producer.as_ref(),
             &topic_name,

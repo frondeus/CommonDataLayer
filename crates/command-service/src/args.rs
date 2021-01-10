@@ -1,4 +1,4 @@
-use crate::input::{GRpcConfig, InputConfig, KafkaConfig};
+use crate::input::{GRpcConfig, InputConfig, MessageQueueConfig};
 use crate::output::OutputArgs;
 use crate::report::ReportServiceConfig;
 use structopt::clap::arg_enum;
@@ -23,20 +23,19 @@ pub struct Args {
 arg_enum! {
     #[derive(Clone, Debug)]
     pub enum IngestionMethod {
-        Kafka,
+        MessageQueue,
         GRpc,
     }
 }
 
 #[derive(Clone, Debug, StructOpt)]
 pub struct InputArgs {
-    #[structopt(long = "kafka-input-group-id", env = "KAFKA_INPUT_GROUP_ID")]
-    pub group_id: Option<String>,
-    #[structopt(long = "kafka-input-brokers", env = "KAFKA_INPUT_BROKERS")]
-    /// Comma separated list of brokers (eg. host1:9092,host2:9092)
-    pub brokers: Option<String>,
-    #[structopt(long = "kafka-input-topic", env = "KAFKA_INPUT_TOPIC")]
-    pub topic: Option<String>,
+    #[structopt(long = "consumer-tag", env = "CONSUMER_TAG")]
+    pub consumer_tag: Option<String>,
+    #[structopt(long = "connection-string", env = "CONNECTION_STRING")]
+    pub connection_string: Option<String>,
+    #[structopt(long = "queue-name", env = "QUEUE_NAME")]
+    pub queue_name: Option<String>,
 
     #[structopt(
         long = "threaded-task-limit",
@@ -58,17 +57,17 @@ impl Args {
     pub fn input_config(&self) -> Result<InputConfig, MissingConfigError> {
         let input_args = &self.input_args;
         Ok(match self.ingestion_method {
-            IngestionMethod::Kafka => InputConfig::Kafka(KafkaConfig {
-                group_id: input_args
-                    .group_id
+            IngestionMethod::MessageQueue => InputConfig::Kafka(MessageQueueConfig {
+                consumer_tag: input_args
+                    .consumer_tag
                     .clone()
-                    .ok_or(MissingConfigError("Group ID"))?,
-                brokers: input_args
-                    .brokers
+                    .ok_or(MissingConfigError("Consumer tag"))?,
+                connection_string: input_args
+                    .connection_string
                     .clone()
-                    .ok_or(MissingConfigError("Brokers"))?,
-                topic: input_args
-                    .topic
+                    .ok_or(MissingConfigError("Connection string"))?,
+                queue_name: input_args
+                    .queue_name
                     .clone()
                     .ok_or(MissingConfigError("Topic"))?,
                 task_limit: input_args.task_limit,

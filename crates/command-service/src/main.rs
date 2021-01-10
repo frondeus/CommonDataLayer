@@ -1,5 +1,5 @@
 use command_service::communication::MessageRouter;
-use command_service::input::{Error, KafkaInput};
+use command_service::input::{Error, MessageQueueInput};
 use command_service::output::{
     DruidOutputPlugin, OutputArgs, OutputPlugin, PostgresOutputPlugin, SleighOutputPlugin,
     VictoriaMetricsOutputPlugin,
@@ -81,7 +81,7 @@ async fn start_services(
 
     match input_config {
         InputConfig::Kafka(input_config) => {
-            KafkaInput::new(input_config, message_router)
+            MessageQueueInput::new(input_config, message_router)
                 .await?
                 .listen()
                 .await?

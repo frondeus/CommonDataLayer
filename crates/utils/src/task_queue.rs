@@ -2,9 +2,26 @@ use std::{collections::{HashMap, VecDeque}, sync::{Arc, Mutex}};
 
 use tokio::sync::oneshot::{channel, Receiver, Sender};
 
+
+// +TODO: Data model - add optional orderGroupId field
+// +TODO: Data router should pass messages to rabbitmq - key = orderGroupId(if exists)
+// TODO: Data router - messages should be persistent(persistent queue + attribute on message) - configurable(?)
+//+ TODO: Command service should listen on rabbitmq
+// TODO: Command service should be able to listen on multiple queues
+// TODO: Command service should have exclusive consumer on a queue - or merge streams
+// TODO: Command service - make sure that acks are done after message is fully processed
+// TODO: Command service - add locking on same orderGroupId
+//+ TODO: Command service - locking limits only parallelization, does not guarantee order(if multiple futures are queued)
+// TODO: Helm files
+// TODO: Docker compose/test changes
+// TODO: Docs
+
+//+ TODO: Use tokio mutex(possible async operations inside)
+//+ TODO: Move to guard structure instead of closure? (release on drop)
+
 // TODO: remove unwraps
 // TODO: change name
-// TODO: make generic
+// TODO: make generic(?)
 
 type LocksDB = Arc<Mutex<HashMap<String, LockQueue>>>;
 

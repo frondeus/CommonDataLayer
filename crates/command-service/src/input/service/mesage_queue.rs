@@ -1,7 +1,7 @@
 use crate::output::OutputPlugin;
 use crate::{
     communication::MessageRouter,
-    input::{Error, KafkaConfig},
+    input::{Error, MessageQueueConfig},
 };
 use log::{error, trace};
 use std::process;
@@ -14,16 +14,16 @@ use utils::messaging_system::Result;
 use utils::metrics::counter;
 use utils::task_limiter::TaskLimiter;
 
-pub struct KafkaInput<P: OutputPlugin> {
+pub struct MessageQueueInput<P: OutputPlugin> {
     consumer: CommonConsumer,
     message_router: MessageRouter<P>,
     task_limiter: TaskLimiter,
 }
 
-impl<P: OutputPlugin> KafkaInput<P> {
-    pub async fn new(config: KafkaConfig, message_router: MessageRouter<P>) -> Result<Self, Error> {
+impl<P: OutputPlugin> MessageQueueInput<P> {
+    pub async fn new(config: MessageQueueConfig, message_router: MessageRouter<P>) -> Result<Self, Error> {
         let consumer =
-            CommonConsumer::new_kafka(&config.group_id, &config.brokers, &[&config.topic])
+            CommonConsumer::new_rabbit(&config.connection_string, &config.consumer_tag, &config.queue_name)
                 .await
                 .map_err(Error::ConsumerCreationFailed)?;
 

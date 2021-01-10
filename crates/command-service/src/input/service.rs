@@ -1,5 +1,5 @@
 mod grpc;
-mod kafka;
+mod mesage_queue;
 
 pub use grpc::GRPCInput;
-pub use kafka::KafkaInput;
+pub use mesage_queue::MessageQueueInput;

@@ -1,13 +1,13 @@
 pub enum InputConfig {
-    Kafka(KafkaConfig),
+    Kafka(MessageQueueConfig),
     GRpc(GRpcConfig),
 }
 
 #[derive(Clone, Debug)]
-pub struct KafkaConfig {
-    pub group_id: String,
-    pub brokers: String,
-    pub topic: String,
+pub struct MessageQueueConfig {
+    pub consumer_tag: String,
+    pub connection_string: String,
+    pub queue_name: String,
     pub task_limit: usize,
 }
 
