@@ -8,7 +8,7 @@ use futures::stream::StreamExt;
 use log::{error, trace};
 use std::process;
 use tokio::pin;
-use utils::message_types::BorrowedInsertMessage;
+use utils::{message_types::BorrowedInsertMessage, messaging_system::consumer::BasicConsumeOptions};
 use utils::messaging_system::consumer::CommonConsumer;
 use utils::messaging_system::message::CommunicationMessage;
 use utils::messaging_system::Result;
@@ -25,9 +25,10 @@ impl<P: OutputPlugin> MessageQueueInput<P> {
     pub async fn new(config: MessageQueueConfig, message_router: MessageRouter<P>) -> Result<Self, Error> {
 
         let mut consumers = Vec::new();
+        let options = Some(BasicConsumeOptions{exclusive:true,..Default::default()});
         for queue_name in config.queue_names {
             let consumer =
-                CommonConsumer::new_rabbit(&config.connection_string, &config.consumer_tag, &queue_name)
+                CommonConsumer::new_rabbit(&config.connection_string, &config.consumer_tag, &queue_name, options)
                     .await
                     .map_err(Error::ConsumerCreationFailed)?;
             consumers.push(consumer);
