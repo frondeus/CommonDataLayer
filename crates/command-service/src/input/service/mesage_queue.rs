@@ -6,9 +6,9 @@ use crate::{
 use futures::{Stream, stream::select_all};
 use futures::stream::StreamExt; 
 use log::{error, trace};
-use std::process;
+use std::{process, sync::Arc};
 use tokio::pin;
-use utils::{message_types::BorrowedInsertMessage, messaging_system::consumer::BasicConsumeOptions};
+use utils::{message_types::BorrowedInsertMessage, messaging_system::consumer::BasicConsumeOptions, task_queue::TaskQueue};
 use utils::messaging_system::consumer::CommonConsumer;
 use utils::messaging_system::message::CommunicationMessage;
 use utils::messaging_system::Result;
@@ -19,6 +19,7 @@ pub struct MessageQueueInput<P: OutputPlugin> {
     consumer: Vec<CommonConsumer>,
     message_router: MessageRouter<P>,
     task_limiter: TaskLimiter,
+    task_queue: Arc<TaskQueue>
 }
 
 impl<P: OutputPlugin> MessageQueueInput<P> {
@@ -38,12 +39,14 @@ impl<P: OutputPlugin> MessageQueueInput<P> {
             consumer:consumers,
             message_router,
             task_limiter: TaskLimiter::new(config.task_limit),
+            task_queue: Arc::new(TaskQueue::default())
         })
     }
 
     async fn handle_message(
         router: MessageRouter<P>,
         message: Result<Box<dyn CommunicationMessage>>,
+        task_queue: Arc<TaskQueue>
     ) -> Result<(), Error> {
         counter!("cdl.command-service.input-request", 1);
         let message = message.map_err(Error::FailedReadingMessage)?;
@@ -51,7 +54,7 @@ impl<P: OutputPlugin> MessageQueueInput<P> {
         let generic_message = Self::build_message(message.as_ref())?;
 
         trace!("Received message {:?}", generic_message);
-
+        task_queue.add_task(generic_message.order_group_id.clone()).await;
         router
             .handle_message(generic_message)
             .await
@@ -86,9 +89,10 @@ impl<P: OutputPlugin> MessageQueueInput<P> {
         while let Some(message) = message_stream.next().await {
             let router = self.message_router.clone();
 
+            let task_queue = self.task_queue.clone();
             self.task_limiter
                 .run(async move || {
-                    if let Err(err) = Self::handle_message(router, message).await {
+                    if let Err(err) = MessageQueueInput::handle_message(router, message,task_queue).await {
                         error!("Failed to handle message: {}", err);
                         process::abort();
                     }
