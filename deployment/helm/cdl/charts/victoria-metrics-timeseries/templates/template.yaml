@@ -29,11 +29,11 @@ spec:
         imagePullPolicy: {{ .Values.global.imagePullPolicy }}
         command: ["/bin/command-service","victoria-metrics"]
         env:
-        - name: KAFKA_INPUT_BROKERS
-          value: {{ .Values.global.kafkaBrokers }}
-        - name: KAFKA_INPUT_GROUP_ID
-          value: "cdl-victoria-metrics-command-service"
-        - name: KAFKA_INPUT_TOPIC
+        - name: QUEUE_CONNECTION_STRING
+          value: {{ .Values.global.rabbitConnectionString }}
+        - name: QUEUE_CONSUMER_TAG
+          value: "cdl-postgres-command-service"
+        - name: QUEUE_NAME
           value: {{ .Values.inputTopic }}
         - name: VICTORIA_METRICS_OUTPUT_URL
           value: {{ .Values.outputURL }}
@@ -44,7 +44,7 @@ spec:
         - name: REPORT_TOPIC
           value: {{ .Values.global.reportTopic }}
         - name: INGESTION_METHOD
-          value: kafka
+          value: {{ .Values.ingestionMethod }}
         ports:
         - containerPort: 51805
   # TODO: Probes

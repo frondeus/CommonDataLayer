@@ -28,11 +28,11 @@ spec:
         imagePullPolicy: {{ .Values.global.imagePullPolicy }}
         command: ["/bin/command-service","postgres"]
         env:
-        - name: KAFKA_INPUT_BROKERS
-          value: {{ .Values.global.kafkaBrokers }}
-        - name: KAFKA_INPUT_GROUP_ID
+        - name: QUEUE_CONNECTION_STRING
+          value: {{ .Values.global.rabbitConnectionString }}
+        - name: QUEUE_CONSUMER_TAG
           value: "cdl-postgres-command-service"
-        - name: KAFKA_INPUT_TOPIC
+        - name: QUEUE_NAME
           value: {{ .Values.inputTopic }}
         - name: INGESTION_METHOD
           value: {{ .Values.ingestionMethod }}

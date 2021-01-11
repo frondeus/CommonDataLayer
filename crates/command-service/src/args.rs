@@ -30,9 +30,9 @@ arg_enum! {
 
 #[derive(Clone, Debug, StructOpt)]
 pub struct InputArgs {
-    #[structopt(long = "consumer-tag", env = "CONSUMER_TAG")]
+    #[structopt(long = "queue-consumer-tag", env = "QUEUE_CONSUMER_TAG")]
     pub consumer_tag: Option<String>,
-    #[structopt(long = "connection-string", env = "CONNECTION_STRING")]
+    #[structopt(long = "queue-connection-string", env = "QUEUE_CONNECTION_STRING")]
     pub connection_string: Option<String>,
     #[structopt(long = "queue-name", env = "QUEUE_NAME")]
     pub queue_name: Option<String>,

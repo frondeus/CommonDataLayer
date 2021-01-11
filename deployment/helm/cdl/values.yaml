@@ -5,6 +5,7 @@ global:
   kafkaBrokers: 10.1.5.4:9092
   cdlImagePullSecrets: services
   reportTopic: cdl.errors
+  rabbitConnectionString: "amqp://rabbitmq:rabbitmq@10.1.1.4:5672/%2f"
 
 dataRouter:
   inputTopic: cdl.data.input
@@ -26,7 +27,7 @@ postgres-document:
   postgresPort: 5432
   postgresDbname: cdldb
   postgresSchema: public
-  ingestionMethod: kafka
+  ingestionMethod: MessageQueue
   inputTopic: cdl.document.data
 
 sled-document:
@@ -34,14 +35,17 @@ sled-document:
   replicaDbCount: 0
   maxDbSize: 3Gi
   storageClass: azurefile
+  ingestionMethod: MessageQueue
   inputTopic: cdl.document2.data
 
 druid-timeseries:
   replicaCommandCount: 1
   inputTopic: cdl.timeseries.data
+  ingestionMethod: MessageQueue
   outputTopic: cdl.timeseries.generic-druid
 
 victoria-metrics-timeseries:
   replicaCommandCount: 1
   inputTopic: cdl.timeseries2.data
+  ingestionMethod: MessageQueue
   outputURL: http://infrastructure-victoria-metrics-single-server:8428/

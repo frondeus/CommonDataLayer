@@ -33,9 +33,9 @@ struct Config {
     #[structopt(long, env)]
     pub kafka_brokers: String,
     #[structopt(long, env)]
-    pub rabbit_connection_string: String,
+    pub kafka_error_channel: String,
     #[structopt(long, env)]
-    pub rabbit_error_queue: String,
+    pub rabbit_connection_string: String,
     #[structopt(long, env)]
     pub schema_registry_addr: String,
     #[structopt(long, env)]
@@ -59,12 +59,15 @@ async fn main() -> anyhow::Result<()> {
             .await
             .unwrap(),
     );
+    let error_producer = Arc::new(
+        CommonPublisher::new_kafka(&config.kafka_brokers).await.unwrap()
+    );
     let cache = Arc::new(Mutex::new(LruCache::new(config.cache_capacity)));
     let consumer = consumer.leak();
     let message_stream = consumer.consume().await;
     pin!(message_stream);
 
-    let kafka_error_channel = Arc::new(config.rabbit_error_queue);
+    let kafka_error_channel = Arc::new(config.kafka_error_channel);
     let schema_registry_addr = Arc::new(config.schema_registry_addr);
 
     while let Some(message) = message_stream.next().await {
@@ -74,6 +77,7 @@ async fn main() -> anyhow::Result<()> {
                     message,
                     cache.clone(),
                     producer.clone(),
+                    error_producer.clone(),
                     kafka_error_channel.clone(),
                     schema_registry_addr.clone(),
                 ));
@@ -91,6 +95,7 @@ async fn handle_message(
     message: Box<dyn CommunicationMessage>,
     cache: Arc<Mutex<LruCache<Uuid, String>>>,
     producer: Arc<CommonPublisher>,
+    error_producer: Arc<CommonPublisher>,
     kafka_error_channel: Arc<String>,
     schema_registry_addr: Arc<String>,
 ) {
@@ -128,7 +133,7 @@ async fn handle_message(
     if let Err(error) = result {
         error!("{:?}", error);
         send_message(
-            producer.as_ref(),
+            error_producer.as_ref(),
             &kafka_error_channel,
             SERVICE_NAME,
             format!("{:?}", error).into(),

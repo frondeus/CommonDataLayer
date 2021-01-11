@@ -64,6 +64,15 @@ rabbitmq:
               "arguments": {
                 "x-queue-type": "classic"
               }
+            },
+            {
+              "name": "cdl.timeseries2.data",
+              "vhost": "/",
+              "durable": true,
+              "auto_delete": false,
+              "arguments": {
+                "x-queue-type": "classic"
+              }
             }
           ],
           "exchanges": [

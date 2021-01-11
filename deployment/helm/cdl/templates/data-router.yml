@@ -32,6 +32,8 @@ spec:
           value: "data-router"
         - name: KAFKA_ERROR_CHANNEL
           value: "{{ .Values.global.reportTopic }}"
+        - name: RABBIT_CONNECTION_STRING
+          value: "{{ .Values.global.rabbitConnectionString }}"
         - name: SCHEMA_REGISTRY_ADDR
           value: "http://{{ .Release.Name }}-schema-registry:6400"
         - name: CACHE_CAPACITY
