@@ -111,12 +111,12 @@ async fn handle_message(
         let payload = BorrowedInsertMessage {
             object_id: insert_message.object_id,
             schema_id: insert_message.schema_id,
-            order_group_id: "TODO:".to_string(),// TODO:
+            order_group_id: insert_message.order_group_id,
             timestamp: current_timestamp(),
             data: insert_message.data,
         };
 
-        let key = payload.order_group_id.to_string();
+        let key = payload.order_group_id.clone().unwrap_or_default();
         send_message(
             producer.as_ref(),
             &topic_name,

@@ -54,7 +54,12 @@ impl<P: OutputPlugin> MessageQueueInput<P> {
         let generic_message = Self::build_message(message.as_ref())?;
 
         trace!("Received message {:?}", generic_message);
-        task_queue.add_task(generic_message.order_group_id.clone()).await;
+        let _guard = if generic_message.order_group_id.is_some(){
+            Some(task_queue.add_task(generic_message.order_group_id.clone().unwrap()).await)
+        }else{
+            None
+        };
+        
         router
             .handle_message(generic_message)
             .await

@@ -8,7 +8,7 @@ use uuid::Uuid;
 pub struct BorrowedInsertMessage<'a> {
     pub object_id: Uuid,
     pub schema_id: Uuid,
-    pub order_group_id: String,
+    pub order_group_id: Option<String>,
     pub timestamp: i64,
     #[serde(borrow)]
     pub data: &'a RawValue,
@@ -17,7 +17,7 @@ pub struct BorrowedInsertMessage<'a> {
 pub struct OwnedInsertMessage {
     pub object_id: Uuid,
     pub schema_id: Uuid,
-    pub order_group_id: String,
+    pub order_group_id: Option<String>,
     pub timestamp: i64,
     pub data: Value,
 }
@@ -39,7 +39,7 @@ impl BorrowedInsertMessage<'_> {
 pub struct DataRouterInsertMessage<'a> {
     pub object_id: Uuid,
     pub schema_id: Uuid,
-    pub order_group_id: String,
+    pub order_group_id: Option<String>,
     #[serde(borrow)]
     pub data: &'a RawValue,
 }
