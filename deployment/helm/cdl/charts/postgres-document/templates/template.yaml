@@ -48,12 +48,12 @@ spec:
           value: {{ .Values.postgresDbname }}
         - name: POSTGRES_SCHEMA
           value: {{ .Values.postgresSchema }}
-        - name: RUST_LOG
-          value: "info,command-service=debug"
         - name: REPORT_BROKER
           value: {{ .Values.global.kafkaBrokers }}
         - name: REPORT_TOPIC
           value: {{ .Values.global.reportTopic }}
+        - name: RUST_LOG
+          value: "info,command_service=trace"
         ports:
         - containerPort: 51805
       imagePullSecrets:

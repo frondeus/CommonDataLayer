@@ -39,7 +39,7 @@ spec:
         - name: CACHE_CAPACITY
           value: "500"
         - name: RUST_LOG
-          value: "info,data-router=debug"
+          value: "info,data_router=debug"
         ports:
         - containerPort: 51805
       imagePullSecrets:

@@ -44,7 +44,7 @@ spec:
             fieldRef:
               fieldPath: metadata.name
         - name: RUST_LOG
-          value: "info,schema-registry=debug"
+          value: "info,schema_registry=debug"
         ports:
         - containerPort: 51805
         volumeMounts:

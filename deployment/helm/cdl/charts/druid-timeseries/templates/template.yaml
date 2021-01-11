@@ -39,14 +39,14 @@ spec:
           value: {{ .Values.global.kafkaBrokers }}
         - name: DRUID_OUTPUT_TOPIC
           value: {{ .Values.outputTopic }}
-        - name: RUST_LOG
-          value: "info,command-service=debug"
         - name: REPORT_BROKER
           value: {{ .Values.global.kafkaBrokers }}
         - name: REPORT_TOPIC
           value: {{ .Values.global.reportTopic }}
         - name: INGESTION_METHOD
           value: {{ .Values.ingestionMethod }}
+        - name: RUST_LOG
+          value: "info,command_service=debug"
         ports:
         - containerPort: 51805
   # TODO: Probes
