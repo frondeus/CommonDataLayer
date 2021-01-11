@@ -7,7 +7,7 @@ use tokio::sync::oneshot::{channel, Receiver, Sender};
 
 // +TODO: Data model - add optional orderGroupId field
 // +TODO: Data router should pass messages to rabbitmq - key = orderGroupId(if exists)
-// TODO: Data router - messages should be persistent(persistent queue + attribute on message) - configurable(?)
+//+ TODO: Data router - messages should be persistent(persistent queue + attribute on message) - configurable(?)
 //+ TODO: Command service should listen on rabbitmq
 //+ TODO: Command service should be able to listen on multiple queues
 //+ TODO: Command service should have exclusive consumer on a queue - or merge streams

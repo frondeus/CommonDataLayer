@@ -62,7 +62,7 @@ impl CommonPublisher {
                         key,
                         BasicPublishOptions::default(),
                         payload,
-                        BasicProperties::default(),
+                        BasicProperties::default().with_delivery_mode(2),
                     )
                     .await?
                     .await?;
