@@ -1,5 +1,5 @@
 use anyhow::Context;
-use log::error;
+use log::{error, trace};
 use lru_cache::LruCache;
 use rpc::schema_registry::Id;
 use serde::{Deserialize, Serialize};
@@ -115,8 +115,9 @@ async fn handle_message(
             timestamp: current_timestamp(),
             data: insert_message.data,
         };
-
-        let key = payload.order_group_id.clone().unwrap_or_default();
+        
+        let key = payload.order_group_id.clone().unwrap_or_default().to_string();
+        trace!("send_message {:?} {:?} ",key, topic_name);
         send_message(
             producer.as_ref(),
             &topic_name,

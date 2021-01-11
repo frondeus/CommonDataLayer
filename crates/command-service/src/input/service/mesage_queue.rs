@@ -55,7 +55,7 @@ impl<P: OutputPlugin> MessageQueueInput<P> {
 
         trace!("Received message {:?}", generic_message);
         let _guard = if generic_message.order_group_id.is_some(){
-            Some(task_queue.add_task(generic_message.order_group_id.clone().unwrap()).await)
+            Some(task_queue.add_task(generic_message.order_group_id.clone().unwrap().to_string()).await)
         }else{
             None
         };
