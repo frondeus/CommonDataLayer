@@ -73,14 +73,14 @@ async fn main() -> anyhow::Result<()> {
     while let Some(message) = message_stream.next().await {
         match message {
             Ok(message) => {
-                tokio::spawn(handle_message(
+                handle_message(
                     message,
                     cache.clone(),
                     producer.clone(),
                     error_producer.clone(),
                     kafka_error_channel.clone(),
                     schema_registry_addr.clone(),
-                ));
+                ).await;
             }
             Err(error) => {
                 error!("Error fetching data from message queue {:?}", error);
