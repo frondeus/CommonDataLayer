@@ -53,7 +53,7 @@ spec:
         - name: REPORT_TOPIC
           value: {{ .Values.global.reportTopic }}
         - name: RUST_LOG
-          value: "info,command_service=trace"
+          value: "info,command_service=debug"
         ports:
         - containerPort: 51805
       imagePullSecrets:
