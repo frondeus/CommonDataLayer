@@ -116,7 +116,7 @@ async fn handle_message(
             data: insert_message.data,
         };
         
-        let key = payload.order_group_id.map(|x|x.to_string()).unwrap_or_else(||"unordered".to_string());
+        let key = payload.order_group_id.map(|x|x.to_string().replace("-", ".")).unwrap_or_else(||"unordered".to_string());
         trace!("send_message {:?} {:?} ",key, topic_name);
         send_message(
             producer.as_ref(),
