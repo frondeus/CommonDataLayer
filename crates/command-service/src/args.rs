@@ -68,14 +68,14 @@ impl Args {
                 .connection_string
                 .clone()
                 .ok_or(MissingConfigError("Connection string"))?;
-                let queue_names:Vec<_> =  input_args
+                let mut queue_names:Vec<_> =  input_args
                 .queue_name
                 .clone()
                 .unwrap_or_default()
                 .split(',')
                 .map(String::from)
                 .collect();
-                let unordered_queue_names:Vec<_>= input_args
+                let mut unordered_queue_names:Vec<_>= input_args
                 .unordered_queue_name
                 .clone()
                 .unwrap_or_default()
@@ -84,6 +84,13 @@ impl Args {
                 .collect();
                 
                 let task_limit= input_args.task_limit;
+
+                if queue_names.len()==1 && queue_names.first().unwrap().is_empty(){
+                    queue_names.clear();
+                }
+                if unordered_queue_names.len()==1 && unordered_queue_names.first().unwrap().is_empty(){
+                    unordered_queue_names.clear();
+                }
                 if queue_names.is_empty() && unordered_queue_names.is_empty(){
                      return Err(MissingConfigError("Topic"));
                 }
