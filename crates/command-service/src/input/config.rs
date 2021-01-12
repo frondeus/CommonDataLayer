@@ -1,5 +1,5 @@
 pub enum InputConfig {
-    Kafka(MessageQueueConfig),
+    MessageQueue(MessageQueueConfig),
     GRpc(GRpcConfig),
 }
 
@@ -8,6 +8,7 @@ pub struct MessageQueueConfig {
     pub consumer_tag: String,
     pub connection_string: String,
     pub queue_names: Vec<String>,
+    pub unordered_queue_names: Vec<String>,
     pub task_limit: usize,
 }
 

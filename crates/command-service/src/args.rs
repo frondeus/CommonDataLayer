@@ -36,6 +36,8 @@ pub struct InputArgs {
     pub connection_string: Option<String>,
     #[structopt(long = "queue-name", env = "QUEUE_NAME")]
     pub queue_name: Option<String>,
+    #[structopt(long = "unordered-queue-name", env = "UNORDERED_QUEUE_NAME")]
+    pub unordered_queue_name: Option<String>,
 
     #[structopt(
         long = "threaded-task-limit",
@@ -57,29 +59,47 @@ impl Args {
     pub fn input_config(&self) -> Result<InputConfig, MissingConfigError> {
         let input_args = &self.input_args;
         Ok(match self.ingestion_method {
-            IngestionMethod::MessageQueue => InputConfig::Kafka(MessageQueueConfig {
-                consumer_tag: input_args
-                    .consumer_tag
-                    .clone()
-                    .ok_or(MissingConfigError("Consumer tag"))?,
-                connection_string: input_args
-                    .connection_string
-                    .clone()
-                    .ok_or(MissingConfigError("Connection string"))?,
-                queue_names: input_args
-                    .queue_name
-                    .clone()
-                    .ok_or(MissingConfigError("Topic"))?
-                    .split(',')
-                    .map(String::from)
-                    .collect(),
-                task_limit: input_args.task_limit,
-            }),
+            IngestionMethod::MessageQueue => {
+                let consumer_tag= input_args
+                .consumer_tag
+                .clone()
+                .ok_or(MissingConfigError("Consumer tag"))?;
+                let connection_string= input_args
+                .connection_string
+                .clone()
+                .ok_or(MissingConfigError("Connection string"))?;
+                let queue_names:Vec<_> =  input_args
+                .queue_name
+                .clone()
+                .unwrap_or_default()
+                .split(',')
+                .map(String::from)
+                .collect();
+                let unordered_queue_names:Vec<_>= input_args
+                .unordered_queue_name
+                .clone()
+                .unwrap_or_default()
+                .split(',')
+                .map(String::from)
+                .collect();
+                
+                let task_limit= input_args.task_limit;
+                if queue_names.is_empty() && unordered_queue_names.is_empty(){
+                     return Err(MissingConfigError("Topic"));
+                }
+                InputConfig::MessageQueue(MessageQueueConfig {
+                    connection_string,
+                    consumer_tag,
+                    queue_names,
+                    task_limit,
+                    unordered_queue_names
+            })},
             IngestionMethod::GRpc => InputConfig::GRpc(GRpcConfig {
                 grpc_port: input_args
                     .grpc_port
                     .ok_or(MissingConfigError("GRPC port"))?,
             }),
         })
+        
     }
 }

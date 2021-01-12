@@ -26,10 +26,18 @@ impl<P: OutputPlugin> MessageQueueInput<P> {
     pub async fn new(config: MessageQueueConfig, message_router: MessageRouter<P>) -> Result<Self, Error> {
 
         let mut consumers = Vec::new();
-        let options = Some(BasicConsumeOptions{exclusive:true,..Default::default()});
+        let ordered_options = Some(BasicConsumeOptions{exclusive:true,..Default::default()});
+        let unordered_options = Some(BasicConsumeOptions{exclusive:true,..Default::default()});
         for queue_name in config.queue_names {
             let consumer =
-                CommonConsumer::new_rabbit(&config.connection_string, &config.consumer_tag, &queue_name, options)
+                CommonConsumer::new_rabbit(&config.connection_string, &config.consumer_tag, &queue_name, ordered_options)
+                    .await
+                    .map_err(Error::ConsumerCreationFailed)?;
+            consumers.push(consumer);
+        }
+        for queue_name in config.unordered_queue_names {
+            let consumer =
+                CommonConsumer::new_rabbit(&config.connection_string, &config.consumer_tag, &queue_name, unordered_options)
                     .await
                     .map_err(Error::ConsumerCreationFailed)?;
             consumers.push(consumer);

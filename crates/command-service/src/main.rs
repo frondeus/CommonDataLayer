@@ -80,7 +80,7 @@ async fn start_services(
     let message_router = MessageRouter::new(report_service, output);
 
     match input_config {
-        InputConfig::Kafka(input_config) => {
+        InputConfig::MessageQueue(input_config) => {
             MessageQueueInput::new(input_config, message_router)
                 .await?
                 .listen()
