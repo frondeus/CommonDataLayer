@@ -101,7 +101,7 @@ async fn handle_message(
     
 
         // Check if something is an array
-        let value : Value = serde_json::from_str(message.payload()?).unwrap();
+        let value : Value = serde_json::from_str(message.payload()?).context("Payload detection failed, message is not in json format")?;
         if value.is_array() {
             let arr_messages: Vec<DataRouterInputData> = serde_json::from_str(message.payload()?)?;
             for event in arr_messages.iter(){
