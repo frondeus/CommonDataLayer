@@ -4,11 +4,11 @@ use std::{process, sync::PoisonError};
 pub mod message_types;
 pub mod messaging_system;
 pub mod metrics;
+pub mod parallel_task_queue;
 pub mod psql;
 pub mod query_utils;
 pub mod status_endpoints;
 pub mod task_limiter;
-pub mod task_queue;
 
 pub fn abort_on_poison<T>(_e: PoisonError<T>) -> T {
     error!("Encountered mutex poisoning. Aborting.");

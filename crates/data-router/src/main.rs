@@ -60,7 +60,9 @@ async fn main() -> anyhow::Result<()> {
             .unwrap(),
     );
     let error_producer = Arc::new(
-        CommonPublisher::new_kafka(&config.kafka_brokers).await.unwrap()
+        CommonPublisher::new_kafka(&config.kafka_brokers)
+            .await
+            .unwrap(),
     );
     let cache = Arc::new(Mutex::new(LruCache::new(config.cache_capacity)));
     let consumer = consumer.leak();
@@ -80,7 +82,8 @@ async fn main() -> anyhow::Result<()> {
                     error_producer.clone(),
                     kafka_error_channel.clone(),
                     schema_registry_addr.clone(),
-                ).await;
+                )
+                .await;
             }
             Err(error) => {
                 error!("Error fetching data from message queue {:?}", error);
@@ -115,9 +118,12 @@ async fn handle_message(
             timestamp: current_timestamp(),
             data: insert_message.data,
         };
-        
-        let key = payload.order_group_id.map(|x|x.to_string().replace("-", ".")).unwrap_or_else(||"unordered".to_string());
-        trace!("send_message {:?} {:?} ",key, topic_name);
+
+        let key = payload
+            .order_group_id
+            .map(|x| x.to_string().replace("-", "."))
+            .unwrap_or_else(|| "unordered".to_string());
+        trace!("send_message {:?} {:?} ", key, topic_name);
         send_message(
             producer.as_ref(),
             &topic_name,

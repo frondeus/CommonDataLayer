@@ -34,10 +34,10 @@ pub struct InputArgs {
     pub consumer_tag: Option<String>,
     #[structopt(long = "queue-connection-string", env = "QUEUE_CONNECTION_STRING")]
     pub connection_string: Option<String>,
-    #[structopt(long = "queue-name", env = "QUEUE_NAME")]
-    pub queue_name: Option<String>,
-    #[structopt(long = "unordered-queue-name", env = "UNORDERED_QUEUE_NAME")]
-    pub unordered_queue_name: Option<String>,
+    #[structopt(long = "ordered-queue-names", env = "ORDERED_QUEUE_NAMES")]
+    pub ordered_queue_names: Option<String>,
+    #[structopt(long = "unordered-queue-names", env = "UNORDERED_QUEUE_NAMES")]
+    pub unordered_queue_names: Option<String>,
 
     #[structopt(
         long = "threaded-task-limit",
@@ -60,53 +60,49 @@ impl Args {
         let input_args = &self.input_args;
         Ok(match self.ingestion_method {
             IngestionMethod::MessageQueue => {
-                let consumer_tag= input_args
-                .consumer_tag
-                .clone()
-                .ok_or(MissingConfigError("Consumer tag"))?;
-                let connection_string= input_args
-                .connection_string
-                .clone()
-                .ok_or(MissingConfigError("Connection string"))?;
-                let mut queue_names:Vec<_> =  input_args
-                .queue_name
-                .clone()
-                .unwrap_or_default()
-                .split(',')
-                .map(String::from)
-                .collect();
-                let mut unordered_queue_names:Vec<_>= input_args
-                .unordered_queue_name
-                .clone()
-                .unwrap_or_default()
-                .split(',')
-                .map(String::from)
-                .collect();
-                
-                let task_limit= input_args.task_limit;
+                let consumer_tag = input_args
+                    .consumer_tag
+                    .clone()
+                    .ok_or(MissingConfigError("Consumer tag"))?;
+                let connection_string = input_args
+                    .connection_string
+                    .clone()
+                    .ok_or(MissingConfigError("Connection string"))?;
+                let ordered_queue_names: Vec<_> = input_args
+                    .ordered_queue_names
+                    .clone()
+                    .unwrap_or_default()
+                    .split(',')
+                    .filter(|x| !x.is_empty())
+                    .map(String::from)
+                    .collect();
+                let unordered_queue_names: Vec<_> = input_args
+                    .unordered_queue_names
+                    .clone()
+                    .unwrap_or_default()
+                    .split(',')
+                    .filter(|x| !x.is_empty())
+                    .map(String::from)
+                    .collect();
 
-                if queue_names.len()==1 && queue_names.first().unwrap().is_empty(){
-                    queue_names.clear();
-                }
-                if unordered_queue_names.len()==1 && unordered_queue_names.first().unwrap().is_empty(){
-                    unordered_queue_names.clear();
-                }
-                if queue_names.is_empty() && unordered_queue_names.is_empty(){
-                     return Err(MissingConfigError("Topic"));
+                let task_limit = input_args.task_limit;
+
+                if ordered_queue_names.is_empty() && unordered_queue_names.is_empty() {
+                    return Err(MissingConfigError("Queue names"));
                 }
                 InputConfig::MessageQueue(MessageQueueConfig {
                     connection_string,
                     consumer_tag,
-                    queue_names,
+                    ordered_queue_names,
                     task_limit,
-                    unordered_queue_names
-            })},
+                    unordered_queue_names,
+                })
+            }
             IngestionMethod::GRpc => InputConfig::GRpc(GRpcConfig {
                 grpc_port: input_args
                     .grpc_port
                     .ok_or(MissingConfigError("GRPC port"))?,
             }),
         })
-        
     }
 }

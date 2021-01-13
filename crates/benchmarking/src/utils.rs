@@ -65,7 +65,7 @@ impl<'v> Message<'v> {
         Message {
             object_id: Uuid::new_v4(),
             schema_id,
-            order_group_id:Some(schema_id),
+            order_group_id: Some(schema_id),
             data,
         }
     }

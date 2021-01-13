@@ -5,34 +5,16 @@ use std::{
 
 use tokio::sync::oneshot::{channel, Receiver, Sender};
 
-// +TODO: Data model - add optional orderGroupId field
-// +TODO: Data router should pass messages to rabbitmq - key = orderGroupId(if exists)
-//+ TODO: Data router - messages should be persistent(persistent queue + attribute on message) - configurable(?)
-//+ TODO: Command service should listen on rabbitmq
-//+ TODO: Command service should be able to listen on multiple queues
-//+ TODO: Command service should have exclusive consumer on a queue - or merge streams
-//+ TODO: Command service - make sure that acks are done after message is fully processed
-//+ TODO: Command service - add locking on same orderGroupId
-//+ TODO: Command service - locking limits only parallelization, does not guarantee order(if multiple futures are queued)
-// TODO: Helm files
-// TODO: Docker compose/test changes
-// TODO: Docs
-
-//+ TODO: Use tokio mutex(possible async operations inside)
-//+ TODO: Move to guard structure instead of closure? (release on drop)
-
-// TODO: remove unwraps
-// TODO: change name
-// TODO: make generic(?)
+use crate::abort_on_poison;
 
 type LocksDB = Arc<Mutex<HashMap<String, LockQueue>>>;
 
-pub struct TaskQueue {
+pub struct ParallelTaskQueue {
     locks: LocksDB,
 }
 
-impl TaskQueue {
-    pub async fn add_task(&self, key: String) -> LockGuard {
+impl ParallelTaskQueue {
+    pub async fn run_task(&self, key: String) -> LockGuard {
         let receiver = {
             let mut locks = self.locks.lock().unwrap();
             let lock_queue = LockQueue::new();
@@ -46,13 +28,15 @@ impl TaskQueue {
             key,
         }
     }
-    pub fn new() -> TaskQueue {
-        TaskQueue {
+
+    pub fn new() -> ParallelTaskQueue {
+        ParallelTaskQueue {
             locks: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 }
-impl Default for TaskQueue {
+
+impl Default for ParallelTaskQueue {
     fn default() -> Self {
         Self::new()
     }
@@ -107,8 +91,10 @@ pub struct LockGuard {
 }
 impl Drop for LockGuard {
     fn drop(&mut self) {
-        let mut guard = self.db.lock().unwrap();
-        let entry = (*guard).get_mut(&self.key).unwrap();
+        let mut guard = self.db.lock().unwrap_or_else(abort_on_poison);
+        let entry = (*guard)
+            .get_mut(&self.key)
+            .expect("LockGuard already dropped");
         entry.end_task();
         if !entry.is_blocked {
             (*guard).remove(&self.key);

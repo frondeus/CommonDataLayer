@@ -32,7 +32,7 @@ spec:
           value: {{ .Values.global.rabbitConnectionString }}
         - name: QUEUE_CONSUMER_TAG
           value: "cdl-postgres-command-service"
-        - name: QUEUE_NAME
+        - name: ORDERED_QUEUE_NAMES
           value: {{ .Values.inputTopic }}
         - name: INGESTION_METHOD
           value: {{ .Values.ingestionMethod }}

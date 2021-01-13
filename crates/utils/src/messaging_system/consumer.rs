@@ -1,6 +1,7 @@
 use anyhow::Context;
 use async_stream::try_stream;
 use futures_util::stream::{Stream, StreamExt};
+pub use lapin::options::BasicConsumeOptions;
 use lapin::types::FieldTable;
 use rdkafka::{
     consumer::{DefaultConsumerContext, StreamConsumer},
@@ -8,7 +9,6 @@ use rdkafka::{
 };
 use std::sync::Arc;
 use tokio_amqp::LapinTokioExt;
-pub use lapin::options::BasicConsumeOptions;
 
 use super::{
     message::CommunicationMessage, message::KafkaCommunicationMessage,
@@ -51,7 +51,7 @@ impl CommonConsumer {
         connection_string: &str,
         consumer_tag: &str,
         queue_name: &str,
-        consume_options: Option<BasicConsumeOptions>
+        consume_options: Option<BasicConsumeOptions>,
     ) -> Result<CommonConsumer> {
         let consume_options = consume_options.unwrap_or_default();
         let connection = lapin::Connection::connect(
