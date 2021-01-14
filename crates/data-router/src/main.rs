@@ -3,6 +3,7 @@ use log::error;
 use lru_cache::LruCache;
 use rpc::schema_registry::Id;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{
     process,
@@ -11,7 +12,7 @@ use std::{
 use structopt::StructOpt;
 use tokio::pin;
 use tokio::stream::StreamExt;
-use utils::message_types::DataRouterInsertMessage;
+use utils::message_types::{DataRouterInsertMessage, OwnedInsertMessage};
 use utils::{
     abort_on_poison,
     message_types::BorrowedInsertMessage,
@@ -92,46 +93,36 @@ async fn handle_message(
     kafka_error_channel: Arc<String>,
     schema_registry_addr: Arc<String>,
 ) {
+    counter!("cdl.data-router.input-msg", 1);
     let result: anyhow::Result<()> = async {
-        let payload = message.payload()?;
-
-        let insert_message: DataRouterInsertMessage =
-            serde_json::from_str(payload).context("Payload deserialization failed")?;
-
-        let topic_name =
-            get_schema_topic(&cache, insert_message.schema_id, &schema_registry_addr).await?;
-
-        let payload = BorrowedInsertMessage {
-            object_id: insert_message.object_id,
-            schema_id: insert_message.schema_id,
-            timestamp: current_timestamp(),
-            data: insert_message.data,
-        };
-
-        let key = payload.object_id.to_string();
-        send_message(
-            producer.as_ref(),
-            &topic_name,
-            &key,
-            serde_json::to_vec(&payload)?,
-        )
-        .await;
+        let json_payload: Value =
+            serde_json::from_str(message.payload()?).context("Payload deserialization failed")?;
+        if json_payload.is_array() {
+            // let msg_array : Vec<DataRouterInsertMessage> = serde_json::from_str(message.payload()?)?
+            //     .context("Payload deserialization failed, message is not a valid cdl message")?;
+            for entry in json_payload.as_array().context("Array Deserialization Problem")? {
+                // let single_msg =  serde_json::from_value::<DataRouterInsertMessage>(*entry)
+                //     .context("Payload deserialization failed, message is not a valid cdl message")?;
+                route(&cache, entry.clone(), &producer, &schema_registry_addr)
+                    .await
+                    .context("Tried to send message and failed")?;
+                counter!("cdl.data-router.input-multimsg", 1);
+            }
+        } else {
+            // let single_msg =  serde_json::from_value::<DataRouterInsertMessage>(json_payload)
+            //     .context("Payload deserialization failed, message is not a valid cdl message")?;
+            route(&cache, json_payload.clone(), &producer, &schema_registry_addr)
+                .await
+                .context("Tried to send message and failed")?;
+            counter!("cdl.data-router.input-singlemsg", 1);
+        }
         Ok(())
     }
     .await;
 
     counter!("cdl.data-router.input-request", 1);
 
-    if let Err(error) = result {
-        error!("{:?}", error);
-        send_message(
-            producer.as_ref(),
-            &kafka_error_channel,
-            SERVICE_NAME,
-            format!("{:?}", error).into(),
-        )
-        .await;
-    }
+
     let ack_result = message.ack().await;
     if let Err(e) = ack_result {
         error!(
@@ -140,6 +131,38 @@ async fn handle_message(
         );
         process::abort();
     }
+}
+
+async fn route(
+    cache: &Mutex<LruCache<Uuid, String>>,
+    // event: Box<DataRouterInsertMessage<'_>>,
+    event: Value,
+    producer: &CommonPublisher,
+    schema_registry_addr: &String,
+) -> anyhow::Result<()> {
+
+    // let single_msg =  serde_json::from_value::<DataRouterInsertMessage>(*entry)
+    //     .context("Payload deserialization failed, message is not a valid cdl message")?;
+    let payload = serde_json::from_value::<DataRouterInsertMessage>(event)
+        .context("Payload deserialization failed, message is not a valid cdl message")?;
+    // let payload = BorrowedInsertMessage {
+    //     object_id: event.object_id,
+    //     schema_id: event.schema_id,
+    //     timestamp: current_timestamp(),
+    //     data: event.data,
+    // };
+    let topic_name = get_schema_topic(&cache, payload.schema_id.clone(), &schema_registry_addr).await?;
+
+    let key = payload.object_id.to_string();
+    send_message(
+        producer,
+        &topic_name,
+        &key,
+        serde_json::to_vec(&payload)?,
+    )
+    .await;
+    counter!("cdl.data-router.input-single-msg", 1);
+    Ok(())
 }
 
 async fn get_schema_topic(
@@ -181,8 +204,10 @@ async fn send_message(producer: &CommonPublisher, topic_name: &str, key: &str, p
             "Fatal error, delivery status for message not received.  Topic: `{}`, Key: `{}`, Payload len: `{}`, {:?}",
             topic_name, key, payload_len, delivery_status
         );
+        counter!("cdl.data-router.output-sendabort", 1);
         process::abort();
     };
+        counter!("cdl.data-router.output-singleok", 1);
 }
 
 fn current_timestamp() -> i64 {
