@@ -94,43 +94,25 @@ async fn handle_message(
 ) {
     // Returns an empty result async for sending message to kafka after serialization
     let result: anyhow::Result<()> = async {
-        let since_the_epoch = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("Time went backwards"); 
-
-    
-
         // Check if something is an array
-        let value : Value = serde_json::from_str(message.payload()?).context("Payload detection failed, message is not in json format")?;
+        let value: Value = serde_json::from_str(message.payload()?)
+            .context("Payload detection failed, message is not in json format")?;
         if value.is_array() {
-            let arr_messages: Vec<DataRouterInputData> = serde_json::from_str(message.payload()?)?;
-            for event in arr_messages.iter(){
-                let topic_name = get_schema_topic(&cache, &event, &schema_registry_addr).await?;
-
-                let data = CommandServiceInsertMessage {
-                    object_id: event.object_id,
-                    payload: event.data,
-                    schema_id: event.schema_id,
-                    timestamp: since_the_epoch.as_millis() as i64, // TODO: Change types?
-                };
-
-                let payload = serde_json::to_vec(&data).unwrap_or_default();
-                let key = data.object_id.to_string();
-                send_message(producer.as_ref(), &topic_name, &key, payload).await;
+            let arr_messages: Vec<DataRouterInputData> = serde_json::from_str(message.payload()?)
+                .context(
+                "Payload deserialization failed, message is not a valid cdl message ",
+            )?;
+            for event in arr_messages.iter() {
+                route(&cache, &event, &producer, &schema_registry_addr)
+                    .await
+                    .context("Tried to send message and failed")?;
             }
         } else {
-            let event  = serde_json::from_str(message.payload()?).context("Payload deserialization failed")?;
-            let topic_name = get_schema_topic(&cache, &event, &schema_registry_addr).await?;
-
-            let data = CommandServiceInsertMessage {
-                object_id: event.object_id,
-                payload: event.data,
-                schema_id: event.schema_id,
-                timestamp: since_the_epoch.as_millis() as i64, // TODO: Change types?
-            };
-            let payload = serde_json::to_vec(&data).unwrap_or_default();
-            let key = data.object_id.to_string();
-            send_message(producer.as_ref(), &topic_name, &key, payload).await;
+            let event = serde_json::from_str(message.payload()?)
+                .context("Payload deserialization failed, message is not a valid cdl message ")?;
+            route(&cache, &event, &producer, &schema_registry_addr)
+                .await
+                .context("Tried to send message and failed")?;
         }
         Ok(())
     }
@@ -156,6 +138,30 @@ async fn handle_message(
         );
         process::abort();
     }
+}
+
+async fn route(
+    cache: &Mutex<LruCache<Uuid, String>>,
+    event: &DataRouterInputData<'_>,
+    producer: &CommonPublisher,
+    schema_registry_addr: &String,
+) -> anyhow::Result<()> {
+    let since_the_epoch = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("Time went backwards");
+
+    let topic_name = get_schema_topic(&cache, &event, schema_registry_addr).await?;
+    let data = CommandServiceInsertMessage {
+        object_id: event.object_id,
+        payload: event.data,
+        schema_id: event.schema_id,
+        timestamp: since_the_epoch.as_millis() as i64, // TODO: Change types?
+    };
+    let payload = serde_json::to_vec(&data).unwrap_or_default();
+    let key = data.object_id.to_string();
+    send_message(producer, &topic_name, &key, payload).await;
+    counter!("cdl.data-router.input-single-msg", 1);
+    Ok(())
 }
 
 async fn get_schema_topic(
