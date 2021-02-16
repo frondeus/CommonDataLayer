@@ -8,17 +8,26 @@ global:
   cdlImagePullSecrets: services
   reportTopicOrExchange: cdl.errors
 
+api:
+  port: 30152
+
 dataRouter:
   inputTopicOrQueue: cdl.data.input
   multitasking: true
+
+leaderElector:
+  heartbeatTime: 2
+
+queryRouter:
+  port: 30153
 
 schemaRegistry:
   storageClass: standard
   storageSize: 3Gi
   port: 30150
 
-leaderElector:
-  heartbeatTime: 2
+webAdmin:
+  port: 30151
 
 postgres-document:
   commandServiceReplicaCount: 1
