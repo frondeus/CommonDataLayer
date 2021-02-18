@@ -1,4 +1,6 @@
 # Query Service
+Each Query Service serves a common set of queries, and translates those into their respective database's query language.
+Two query-services are present: one for timeseries databases, and one for documents.
 
 ### Technical Description
 
@@ -38,6 +40,6 @@ POSTGRES_SCHEMA
 See an example [configuration][configuration] of deployment of data router and other services. 
 
 [grpc]: https://grpc.io/docs/what-is-grpc/introduction/
-[schema-registry]: ../crates/schema-registry/README.md
-[configuration]: ../deployment/compose/README.md
+[schema-registry]: schema_registry.md
+[configuration]: ../deployment/docker-compose.md
 [endpoints]: ../crates/rpc/proto

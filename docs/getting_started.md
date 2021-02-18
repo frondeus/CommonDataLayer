@@ -124,12 +124,12 @@ See [k8s_local_deployment.md][deployment]
 
 
 [installation]: https://www.rust-lang.org/tools/install
-[deployment]: ./k8s_local_deployment.md
+[deployment]: ./deployment/helm.md
 [docker-desktop]: https://docs.docker.com/desktop/
-[local-setup]: ../deployment/compose/README.md
+[local-setup]: deployment/docker-compose.md
 [grpc]: https://grpc.io/docs/what-is-grpc/introduction/
-[command-service]: command_service.md
-[schema-registry]: ../crates/schema-registry/README.md
-[query-service]: query_service.md
-[data-router]: data_router.md
-[proto]: ../crates/rpc/proto
+[command-service]: ./architecture/command_service.md
+[schema-registry]: ./architecture/schema_registry.md
+[query-service]: ./architecture/query_service.md
+[data-router]: ./architecture/data_router.md
+[proto]: https://github.com/epiphany-platform/CommonDataLayer/crates/rpc/proto
