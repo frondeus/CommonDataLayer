@@ -3,11 +3,69 @@ name: Test
 on:
   push:
     branches:
-      - "*"
+      - "develop"
   pull_request:
 
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  RUST_BACKTRACE: short
+  RUSTUP_MAX_RETRIES: 10
 
 jobs:
+  cargo-testing:
+    name: Test rust code
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v2
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          override: true
+          components: clippy, rustfmt
+
+      - name: Cache cargo directories
+        uses: actions/cache@v2.1.4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo target dir
+        uses: actions/cache@v2.1.4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Clippy
+        run: find . | grep "\.rs$" | grep -v "\./target/" | xargs touch ; cargo clippy --locked --all-features -- -D warnings
+
+      - name: Fmt
+        uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: -- --check
+
+      - name: Deny invalid licenses
+        uses: EmbarkStudios/cargo-deny-action@v1
+        with:
+          command: check license
+
+      - name: Test
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --workspace
+
+      - name: Clear bloat
+        run: find . -path "./target/debug/deps*" -type f ! -name "*.*" | xargs rm
+
   component-testing:
     name: Test modules
     runs-on: ubuntu-latest
@@ -16,20 +74,32 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v2
 
-      - name: install k8s
-        run: |
-          curl -sfL https://get.k3s.io | K3S_KUBECONFIG_MODE=777 sh -s - --docker
-          cat /etc/rancher/k3s/k3s.yaml
-          mkdir -p ~/.kube
-          cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+      - name: Start environment via docker-compose
+        run: docker-compose -f deployment/compose/docker-compose.yml up -d postgres kafka victoria_metrics
 
-      - name: example tests
-        run: |
-          kubectl cluster-info
-          helm install --values ./deployment/helm/infrastructure/values.yaml infrastructure ./deployment/helm/infrastructure
-          sleep 30
-          helm install --values ./deployment/helm/cdl/values-local.yaml cdl ./deployment/helm/cdl
-          sleep 30
-          kubectl get po
-          docker ps
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+         profile: minimal
+         override: true
 
+      - uses: actions/setup-python@v2
+        with:
+          python-version: '3.x'
+          architecture: 'x64'
+
+      - name: Cache cargo target dir
+        uses: actions/cache@v2.1.4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run tests
+        run: ./run-tests.sh
+        working-directory: ./tests/
+
+      - name: Clear bloat
+        run: find . -path "./target/debug/deps*" -type f ! -name "*.*" | xargs rm
+
+      - name: Stop environment
+        run: docker-compose -f deployment/compose/docker-compose.yml down
