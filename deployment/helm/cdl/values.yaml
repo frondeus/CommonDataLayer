@@ -45,7 +45,7 @@ druid-timeseries:
   queryServiceReplicaCount: 0
   inputTopicOrQueue: cdl.timeseries.data
   outputTopic: cdl.timeseries.generic-druid
-  queryURL: 
+  queryURL:
   tableName: CDL
 
 victoria-metrics-timeseries:
