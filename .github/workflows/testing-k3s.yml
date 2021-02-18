@@ -31,5 +31,9 @@ jobs:
           helm install --values ./deployment/helm/cdl/values-local.yaml cdl ./deployment/helm/cdl
           sleep 30
           kubectl get po
+          sleep 30
+          kubectl get po
+          sleep 30
+          kubectl get po
           docker ps
 
