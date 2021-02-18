@@ -26,4 +26,10 @@ jobs:
       - name: example tests
         run: |
           kubectl cluster-info
+          helm install --values ./deployment/helm/infrastructure/values.yaml infrastructure ./deployment/helm/infrastructure
+          sleep 30
+          helm install --values ./deployment/helm/cdl/values-local.yaml cdl ./deployment/helm/cdl
+          sleep 30
           kubectl get po
+
+
