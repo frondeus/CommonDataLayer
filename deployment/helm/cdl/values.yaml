@@ -31,7 +31,7 @@ webAdmin:
 
 postgres-document:
   commandServiceReplicaCount: 1
-  postgresDbReplicaCount: 0
+  queryServiceReplicaCount: 1
   postgresUsername: postgres
   postgresPassword: postgres
   postgresHost: 10.1.1.5
@@ -40,19 +40,16 @@ postgres-document:
   postgresSchema: public
   inputTopicOrQueue: cdl.document.data
 
-sled-document:
-  replicaCommandCount: 0
-  replicaDbCount: 0
-  maxDbSize: 3Gi
-  storageClass: azurefile
-  inputTopicOrQueue: cdl.document2.data
-
 druid-timeseries:
-  replicaCommandCount: 1
+  replicaCommandCount: 0
+  queryServiceReplicaCount: 0
   inputTopicOrQueue: cdl.timeseries.data
   outputTopic: cdl.timeseries.generic-druid
+  queryURL: 
+  tableName: CDL
 
 victoria-metrics-timeseries:
-  replicaCommandCount: 1
+  replicaCommandCount: 0
+  queryServiceReplicaCount: 0
   inputTopicOrQueue: cdl.timeseries2.data
   outputURL: http://infrastructure-victoria-metrics-single-server:8428/
