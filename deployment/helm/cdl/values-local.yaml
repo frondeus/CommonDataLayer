@@ -12,7 +12,7 @@ dataRouter:
   inputTopicOrQueue: cdl.data.input
 
 schemaRegistry:
-  storageClass: standard
+  storageClass:
   storageSize: 3Gi
   port: 30150
 

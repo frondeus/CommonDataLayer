@@ -23,17 +23,20 @@ jobs:
           mkdir -p ~/.kube
           cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
 
-      - name: example tests
+      - name: deploy infrastructure
+        run: helm install --values ./deployment/helm/infrastructure/values.yaml infrastructure ./deployment/helm/infrastructure
+      - name: build cdl images
+        run: DOCKER_BUILDKIT=1 ENV=DEV ./build.sh
+      - name: add kafka topics
         run: |
-          kubectl cluster-info
-          helm install --values ./deployment/helm/infrastructure/values.yaml infrastructure ./deployment/helm/infrastructure
-          DOCKER_BUILDKIT=1 ENV=DEV ./build.sh
-          helm install --values ./deployment/helm/cdl/values-local.yaml cdl ./deployment/helm/cdl
-          sleep 30
-          kubectl get po
-          sleep 30
-          kubectl get po
-          sleep 30
-          kubectl get po
-          docker ps
-
+          topics=(cdl.data.input CDL_SCHEMA_SYNCHRO cdl.document.data cdl.timeseries.data cdl.timeseries.generic-druid cdl.timeseries2.data)
+          for topic in "${topics[@]}"
+          do
+          kubectl exec infrastructure-kafka-0 /bin/bash -- /opt/bitnami/kafka/bin/kafka-topics.sh --create --topic $topic --bootstrap-server localhost:9092
+          done
+      - name: deploy cdl
+        run: helm install --values ./deployment/helm/cdl/values-local.yaml cdl ./deployment/helm/cdl
+      - name: wait
+        run: sleep 20
+      - name: get status
+        run: kubectl get pods
