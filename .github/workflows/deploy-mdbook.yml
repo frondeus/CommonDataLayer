@@ -2,10 +2,7 @@ name: Deploy the MDBook to GitHub Pages
 
 on:
   push:
-    branches: [ develop ]
-    paths: [ docs ]
   pull_request:
-
 jobs:
   deploy-mdbook:
     runs-on: ubuntu-latest
@@ -26,7 +23,7 @@ jobs:
           mdbook-version: '0.4.6'
 
       - run: curl -LSfs https://japaric.github.io/trust/install.sh | sh -s -- --git Michael-F-Bryan/mdbook-linkcheck
-      - run: apt-get install -y plantuml build-essential
+      - run: sudo apt-get install -y plantuml build-essential
 
       - uses: actions-rs/install@v0.1
         with:
