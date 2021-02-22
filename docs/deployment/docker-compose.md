@@ -110,4 +110,4 @@ docker-compose -f docker-compose.cdl-kafka.yml -f docker-compose.yml -f docker-c
     query_router
 ```
 
-[proto]: https://github.com/epiphany-platform/CommonDataLayer/crates/rpc/proto/schema-registry.proto
+[proto]: https://github.com/epiphany-platform/CommonDataLayer/blob/develop/crates/rpc/proto/schema_registry.proto

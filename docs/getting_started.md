@@ -132,4 +132,4 @@ See [k8s_local_deployment.md][deployment]
 [schema-registry]: ./architecture/schema_registry.md
 [query-service]: ./architecture/query_service.md
 [data-router]: ./architecture/data_router.md
-[proto]: https://github.com/epiphany-platform/CommonDataLayer/crates/rpc/proto
+[proto]: https://github.com/epiphany-platform/CommonDataLayer/tree/develop/crates/rpc/proto

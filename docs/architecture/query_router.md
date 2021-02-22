@@ -53,8 +53,7 @@ Rough sketch of working process:
 {{#include graphs/query_router_data_retrieval.puml}}
 ```
 
-[query-router-puml]: http://www.plantuml.com/plantuml/proxy?src=https://raw.githubusercontent.com/epiphany-platform/CommonDataLayer/develop/docs/graphs/query_router_data_retrieval.puml
 [schema-registry]: schema_registry.md
 [query-service]: query_service.md
-[query-service-ts]: https://github.com/epiphany-platform/CommonDataLayer/crates/query-service-ts
-[api-spec]: https://github.com/epiphany-platform/CommonDataLayer/api.yml
+[query-service-ts]: https://github.com/epiphany-platform/CommonDataLayer/tree/develop/crates/query-service-ts
+[api-spec]: https://github.com/epiphany-platform/CommonDataLayer/blob/develop/crates/query-router/api.yml
