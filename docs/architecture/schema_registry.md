@@ -36,4 +36,4 @@ RUST_LOG
 Mind that GRPC uses HTTP2 as its transport protocol (L4), so SCHEMA_REGISTRY_ADDR must be provided as `http://ip_or_name:port`
 
 
-[CDL-CLI]: CDL-Cli.md
+[CDL-CLI]: cli.md

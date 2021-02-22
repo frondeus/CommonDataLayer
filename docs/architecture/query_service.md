@@ -8,7 +8,7 @@ The query service (`QS` or for example for postgresql its `QSPG`), is responsibl
 First path depends on type of repo
 
 ### Communication
-Communication to query service is done through [gRPC][grpc] based on two [endpoints][endpoints] of querying for data by `SCHEMA_ID` or multiple `OBJECT_ID`s. Query service communicates with multiple databases such as postgresql, druid, sled. Query service also communicates with [schema registry][schema-registry]. 
+Communication to query service is done through [gRPC][grpc] based on two [endpoints][proto] of querying for data by `SCHEMA_ID` or multiple `OBJECT_ID`s. Query service communicates with multiple databases such as postgresql, druid, sled. Query service also communicates with [schema registry][schema-registry]. 
 
 Interacts with:
 - Druid
@@ -42,4 +42,4 @@ See an example [configuration][configuration] of deployment of data router and o
 [grpc]: https://grpc.io/docs/what-is-grpc/introduction/
 [schema-registry]: schema_registry.md
 [configuration]: ../deployment/docker-compose.md
-[endpoints]: ../crates/rpc/proto
+[proto]: https://github.com/epiphany-platform/CommonDataLayer/crates/rpc/proto

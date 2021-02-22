@@ -13,4 +13,4 @@ Currently consists only of the [Data Router][data-router]. The [Data Router][dat
 
 For more details, see the Data Router's [readme][data-router].
 
-[data-router]: ../crates/data-router
+[data-router]: data_router.md
