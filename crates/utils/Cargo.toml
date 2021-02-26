@@ -37,3 +37,4 @@ metrics-observer-prometheus         = "0.1"
 
 [dev-dependencies]
 test-case = "1.1"
+tokio       = { version = "0.2", features = ["rt-threaded", "macros", "sync"] }

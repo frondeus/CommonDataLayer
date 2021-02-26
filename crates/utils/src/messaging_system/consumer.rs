@@ -1,6 +1,6 @@
 use anyhow::Context;
-use async_stream::try_stream;
-use futures_util::stream::{Stream, StreamExt};
+use async_trait::async_trait;
+use futures_util::TryStreamExt;
 pub use lapin::options::BasicConsumeOptions;
 use lapin::types::FieldTable;
 use rdkafka::{
@@ -10,10 +10,22 @@ use rdkafka::{
 use std::sync::Arc;
 use tokio_amqp::LapinTokioExt;
 
+use crate::task_limiter::TaskLimiter;
+
 use super::{
     kafka_ack_queue::KafkaAckQueue, message::AmqpCommunicationMessage,
     message::CommunicationMessage, message::KafkaCommunicationMessage, Result,
 };
+
+#[async_trait]
+pub trait ConsumerHandler {
+    async fn handle<'a>(&'a mut self, msg: &'a dyn CommunicationMessage) -> anyhow::Result<()>;
+}
+
+#[async_trait]
+pub trait ParConsumerHandler: Send + Sync + 'static {
+    async fn handle<'a>(&'a self, msg: &'a dyn CommunicationMessage) -> anyhow::Result<()>;
+}
 
 pub enum CommonConsumerConfig<'a> {
     Kafka {
@@ -30,8 +42,8 @@ pub enum CommonConsumerConfig<'a> {
 }
 pub enum CommonConsumer {
     Kafka {
-        consumer: Arc<StreamConsumer<DefaultConsumerContext>>,
-        ack_queue: Arc<KafkaAckQueue>,
+        consumer: StreamConsumer<DefaultConsumerContext>,
+        ack_queue: KafkaAckQueue,
     },
     Amqp {
         consumer: lapin::Consumer,
@@ -70,7 +82,7 @@ impl CommonConsumer {
             .context("Can't subscribe to specified topics")?;
 
         Ok(CommonConsumer::Kafka {
-            consumer: Arc::new(consumer),
+            consumer,
             ack_queue: Default::default(),
         })
     }
@@ -99,36 +111,111 @@ impl CommonConsumer {
         Ok(CommonConsumer::Amqp { consumer })
     }
 
-    pub async fn consume(
-        &mut self,
-    ) -> impl Stream<Item = Result<Box<dyn CommunicationMessage + '_>>> {
-        try_stream! {
-            match self {
-                CommonConsumer::Kafka { consumer, ack_queue} => {
-                    let mut message_stream = consumer.start();
-                    while let Some(message) = message_stream.next().await {
-                        let message = message?;
-                        ack_queue.add(&message);
-                        yield Box::new(KafkaCommunicationMessage{message,consumer:consumer.clone(),ack_queue:ack_queue.clone()}) as Box<dyn CommunicationMessage>;
+    pub async fn run(self, mut handler: impl ConsumerHandler) -> Result<()> {
+        match self {
+            CommonConsumer::Kafka {
+                consumer,
+                ack_queue,
+            } => {
+                let mut message_stream = consumer.start();
+                while let Some(message) = message_stream.try_next().await? {
+                    ack_queue.add(&message);
+                    let message = KafkaCommunicationMessage { message };
+                    match handler.handle(&message).await {
+                        Ok(_) => {
+                            ack_queue.ack(&message.message, &consumer);
+                        }
+                        Err(e) => {
+                            log::error!("Couldn't process message: {:?}", e);
+                        }
                     }
                 }
-                CommonConsumer::Amqp {
-                    consumer,
-                } => {
-                    while let Some(message) = consumer.next().await {
-                        let message = message?;
-                        yield Box::new(AmqpCommunicationMessage{channel:message.0, delivery:message.1})as Box<dyn CommunicationMessage>;
+            }
+            CommonConsumer::Amqp { mut consumer } => {
+                while let Some((channel, delivery)) = consumer.try_next().await? {
+                    let message = AmqpCommunicationMessage { delivery };
+                    match handler.handle(&message).await {
+                        Ok(_) => {
+                            channel
+                                .basic_ack(message.delivery.delivery_tag, Default::default())
+                                .await?;
+                        }
+                        Err(e) => {
+                            log::error!("Couldn't process message: {:?}", e);
+                        }
                     }
                 }
             }
         }
+        Ok(())
     }
 
-    /// Leaks consumer to guarantee consumer never be dropped.
-    /// Static consumer lifetime is required for consumed messages to be passed to spawned futures.
-    ///
-    /// Use with caution as it can cause memory leaks.
-    pub fn leak(self) -> &'static mut CommonConsumer {
-        Box::leak(Box::new(self))
+    /// Process messages in parallel
+    /// # Memory safety
+    /// This method leaks kafka consumer
+    pub async fn par_run(
+        self,
+        handler: impl ParConsumerHandler,
+        task_limiter: TaskLimiter,
+    ) -> Result<()> {
+        let handler = Arc::new(handler);
+        match self {
+            CommonConsumer::Kafka {
+                consumer,
+                ack_queue,
+            } => {
+                let consumer = Box::leak(Box::new(Arc::new(consumer)));
+                let ack_queue = Arc::new(ack_queue);
+                let mut message_stream = consumer.start();
+                while let Some(message) = message_stream.try_next().await? {
+                    ack_queue.add(&message);
+                    let ack_queue = ack_queue.clone();
+                    let handler = handler.clone();
+                    let consumer = consumer.clone();
+                    task_limiter
+                        .run(move || async move {
+                            let message = KafkaCommunicationMessage { message };
+
+                            match handler.handle(&message).await {
+                                Ok(_) => {
+                                    ack_queue.ack(&message.message, consumer.as_ref());
+                                }
+                                Err(e) => {
+                                    log::error!("Couldn't process message: {:?}", e);
+                                }
+                            }
+                        })
+                        .await;
+                }
+            }
+            CommonConsumer::Amqp { mut consumer } => {
+                while let Some((channel, delivery)) = consumer.try_next().await? {
+                    let handler = handler.clone();
+                    task_limiter
+                        .run(move || async move {
+                            let message = AmqpCommunicationMessage { delivery };
+                            match handler.handle(&message).await {
+                                Ok(_) => {
+                                    if let Err(e) = channel
+                                        .basic_ack(
+                                            message.delivery.delivery_tag,
+                                            Default::default(),
+                                        )
+                                        .await
+                                    {
+                                        log::error!("Couldn't ack message: {:?}", e);
+                                        std::process::abort();
+                                    }
+                                }
+                                Err(e) => {
+                                    log::error!("Couldn't process message: {:?}", e);
+                                }
+                            }
+                        })
+                        .await;
+                }
+            }
+        }
+        Ok(())
     }
 }

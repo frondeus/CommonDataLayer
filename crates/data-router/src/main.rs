@@ -1,4 +1,5 @@
 use anyhow::Context;
+use async_trait::async_trait;
 use log::{debug, error, trace};
 use lru_cache::LruCache;
 use rpc::schema_registry::Id;
@@ -9,13 +10,13 @@ use std::{
     sync::{Arc, Mutex},
 };
 use structopt::{clap::arg_enum, StructOpt};
-use tokio::pin;
-use tokio::stream::StreamExt;
 use utils::{
     abort_on_poison,
     message_types::BorrowedInsertMessage,
     messaging_system::{
-        consumer::CommonConsumer, get_order_group_id, message::CommunicationMessage,
+        consumer::{CommonConsumer, ParConsumerHandler},
+        get_order_group_id,
+        message::CommunicationMessage,
         publisher::CommonPublisher,
     },
     metrics::{self, counter},
@@ -77,9 +78,6 @@ async fn main() -> anyhow::Result<()> {
     let producer = Arc::new(new_producer(&config).await?);
 
     let cache = Arc::new(Mutex::new(LruCache::new(config.cache_capacity)));
-    let consumer = consumer.leak();
-    let message_stream = consumer.consume().await;
-    pin!(message_stream);
 
     let error_topic_or_exchange = Arc::new(config.error_topic_or_exchange);
     let schema_registry_addr = Arc::new(config.schema_registry_addr);
@@ -87,37 +85,120 @@ async fn main() -> anyhow::Result<()> {
     let task_limiter = TaskLimiter::new(config.task_limit);
     let task_queue = Arc::new(ParallelTaskQueue::default());
 
-    while let Some(message) = message_stream.next().await {
-        match message {
-            Ok(message) => {
-                let task_queue = task_queue.clone();
-                let order_group_id = get_order_group_id(message.as_ref());
-
-                let future = handle_message(
-                    message,
-                    cache.clone(),
-                    producer.clone(),
-                    error_topic_or_exchange.clone(),
-                    schema_registry_addr.clone(),
-                );
-                task_limiter
-                    .run(move || async move {
-                        let _guard = order_group_id
-                            .map(move |x| async move { task_queue.acquire_permit(x).await });
-                        future.await
-                    })
-                    .await;
-            }
-            Err(error) => {
-                error!("Error fetching data from message queue {:?}", error);
-                // no error handling necessary - message won't be acked - it was never delivered properly
-            }
-        };
-    }
+    consumer
+        .par_run(
+            Handler {
+                cache,
+                producer,
+                error_topic_or_exchange,
+                schema_registry_addr,
+                task_queue,
+            },
+            task_limiter,
+        )
+        .await?;
 
     tokio::time::delay_for(tokio::time::Duration::from_secs(3)).await;
 
     Ok(())
+}
+
+struct Handler {
+    cache: Arc<Mutex<LruCache<Uuid, String>>>,
+    producer: Arc<CommonPublisher>,
+    error_topic_or_exchange: Arc<String>,
+    schema_registry_addr: Arc<String>,
+    task_queue: Arc<ParallelTaskQueue>,
+}
+
+#[async_trait]
+impl ParConsumerHandler for Handler {
+    async fn handle<'a>(&'a self, message: &'a dyn CommunicationMessage) -> anyhow::Result<()> {
+        let order_group_id = get_order_group_id(message);
+        let _guard =
+            order_group_id.map(move |x| async move { self.task_queue.acquire_permit(x).await });
+
+        trace!("Received message `{:?}`", message.payload());
+
+        let message_key = get_order_group_id(message).unwrap_or_default();
+        counter!("cdl.data-router.input-msg", 1);
+        let result = async {
+            let json_something: Value = serde_json::from_str(message.payload()?)
+                .context("Payload deserialization failed")?;
+            if json_something.is_array() {
+                trace!("Processing multimessage");
+
+                let maybe_array: Vec<DataRouterInsertMessage> = serde_json::from_str(
+                    message.payload()?,
+                )
+                .context("Payload deserialization failed, message is not a valid cdl message ")?;
+
+                let mut result = Ok(());
+
+                for entry in maybe_array.iter() {
+                    let r = route(
+                        &self.cache,
+                        &entry,
+                        &message_key,
+                        &self.producer,
+                        &self.schema_registry_addr,
+                    )
+                    .await
+                    .context("Tried to send message and failed");
+
+                    counter!("cdl.data-router.input-multimsg", 1);
+                    counter!("cdl.data-router.processed", 1);
+
+                    if r.is_err() {
+                        result = r;
+                    }
+                }
+
+                result
+            } else {
+                trace!("Processing single message");
+
+                let owned: DataRouterInsertMessage =
+                    serde_json::from_str::<DataRouterInsertMessage>(message.payload()?).context(
+                        "Payload deserialization failed, message is not a valid cdl message",
+                    )?;
+                let result = route(
+                    &self.cache,
+                    &owned,
+                    &message_key,
+                    &self.producer,
+                    &self.schema_registry_addr,
+                )
+                .await
+                .context("Tried to send message and failed");
+                counter!("cdl.data-router.input-singlemsg", 1);
+                counter!("cdl.data-router.processed", 1);
+
+                result
+            }
+        }
+        .await;
+
+        counter!("cdl.data-router.input-request", 1);
+
+        if let Err(error) = result {
+            counter!("cdl.data-router.error", 1);
+            //TODO: Remove it.
+            send_message(
+                self.producer.as_ref(),
+                &self.error_topic_or_exchange,
+                SERVICE_NAME,
+                format!("{:?}", error).into(),
+            )
+            .await;
+
+            return Err(error);
+        } else {
+            counter!("cdl.data-router.success", 1);
+        }
+
+        Ok(())
+    }
 }
 
 async fn new_producer(config: &Config) -> anyhow::Result<CommonPublisher> {
@@ -180,103 +261,6 @@ async fn new_consumer(config: &Config, topic_or_queue: &str) -> anyhow::Result<C
         }
     };
     Ok(CommonConsumer::new(config).await?)
-}
-
-async fn handle_message(
-    message: Box<dyn CommunicationMessage>,
-    cache: Arc<Mutex<LruCache<Uuid, String>>>,
-    producer: Arc<CommonPublisher>,
-    error_topic_or_exchange: Arc<String>,
-    schema_registry_addr: Arc<String>,
-) {
-    trace!("Received message `{:?}`", message.payload());
-
-    let message_key = get_order_group_id(message.as_ref()).unwrap_or_default();
-    counter!("cdl.data-router.input-msg", 1);
-    let result = async {
-        let json_something: Value =
-            serde_json::from_str(message.payload()?).context("Payload deserialization failed")?;
-        if json_something.is_array() {
-            trace!("Processing multimessage");
-
-            let maybe_array: Vec<DataRouterInsertMessage> = serde_json::from_str(
-                message.payload()?,
-            )
-            .context("Payload deserialization failed, message is not a valid cdl message ")?;
-
-            let mut result = Ok(());
-
-            for entry in maybe_array.iter() {
-                let r = route(
-                    &cache,
-                    &entry,
-                    &message_key,
-                    &producer,
-                    &schema_registry_addr,
-                )
-                .await
-                .context("Tried to send message and failed");
-
-                counter!("cdl.data-router.input-multimsg", 1);
-                counter!("cdl.data-router.processed", 1);
-
-                if r.is_err() {
-                    result = r;
-                }
-            }
-
-            result
-        } else {
-            trace!("Processing single message");
-
-            let owned: DataRouterInsertMessage = serde_json::from_str::<DataRouterInsertMessage>(
-                message.payload()?,
-            )
-            .context("Payload deserialization failed, message is not a valid cdl message")?;
-            let result = route(
-                &cache,
-                &owned,
-                &message_key,
-                &producer,
-                &schema_registry_addr,
-            )
-            .await
-            .context("Tried to send message and failed");
-            counter!("cdl.data-router.input-singlemsg", 1);
-            counter!("cdl.data-router.processed", 1);
-
-            result
-        }
-    }
-    .await;
-
-    counter!("cdl.data-router.input-request", 1);
-
-    if let Err(error) = result {
-        counter!("cdl.data-router.error", 1);
-        error!("{:?}", error);
-        send_message(
-            producer.as_ref(),
-            &error_topic_or_exchange,
-            SERVICE_NAME,
-            format!("{:?}", error).into(),
-        )
-        .await;
-    } else {
-        counter!("cdl.data-router.success", 1);
-    }
-
-    let ack_result = message.ack().await;
-
-    trace!("Message acknowledged");
-
-    if let Err(e) = ack_result {
-        error!(
-            "Fatal error, delivery status for message not received. {:?}",
-            e
-        );
-        process::abort();
-    }
 }
 
 async fn route(

@@ -3,23 +3,72 @@ use crate::{
     communication::{config::MessageQueueConfig, MessageRouter},
     input::Error,
 };
-use futures::stream::select_all;
-use futures::stream::StreamExt;
+use async_trait::async_trait;
+use futures::future::try_join_all;
 use log::{error, trace};
 use std::{process, sync::Arc};
-use tokio::pin;
-use utils::messaging_system::message::CommunicationMessage;
 use utils::messaging_system::Result;
 use utils::messaging_system::{consumer::CommonConsumer, get_order_group_id};
+use utils::messaging_system::{consumer::ParConsumerHandler, message::CommunicationMessage};
 use utils::metrics::counter;
 use utils::task_limiter::TaskLimiter;
 use utils::{message_types::BorrowedInsertMessage, parallel_task_queue::ParallelTaskQueue};
 
 pub struct MessageQueueInput<P: OutputPlugin> {
     consumer: Vec<CommonConsumer>,
-    message_router: MessageRouter<P>,
+    handler: MessageQueueHandler<P>,
     task_limiter: TaskLimiter,
+}
+
+struct MessageQueueHandler<P: OutputPlugin> {
+    message_router: MessageRouter<P>,
     task_queue: Arc<ParallelTaskQueue>,
+}
+
+impl<P: OutputPlugin> Clone for MessageQueueHandler<P> {
+    fn clone(&self) -> Self {
+        Self {
+            message_router: self.message_router.clone(),
+            task_queue: self.task_queue.clone(),
+        }
+    }
+}
+
+#[async_trait]
+impl<P> ParConsumerHandler for MessageQueueHandler<P>
+where
+    P: OutputPlugin,
+{
+    async fn handle<'a>(&'a self, msg: &'a dyn CommunicationMessage) -> anyhow::Result<()> {
+        let order_group_id = get_order_group_id(msg);
+        let _guard = order_group_id
+            .map(move |x| async move { self.task_queue.acquire_permit(x.to_string()).await });
+
+        counter!("cdl.command-service.input-request", 1);
+
+        let generic_message = Self::build_message(msg)?;
+
+        trace!("Received message {:?}", generic_message);
+
+        self.message_router
+            .handle_message(generic_message)
+            .await
+            .map_err(Error::CommunicationError)?;
+
+        Ok(())
+    }
+}
+
+impl<P: OutputPlugin> MessageQueueHandler<P> {
+    fn build_message(
+        message: &'_ dyn CommunicationMessage,
+    ) -> Result<BorrowedInsertMessage<'_>, Error> {
+        let json = message.payload().map_err(Error::MissingPayload)?;
+        let event: BorrowedInsertMessage =
+            serde_json::from_str(json).map_err(Error::PayloadDeserializationFailed)?;
+
+        Ok(event)
+    }
 }
 
 impl<P: OutputPlugin> MessageQueueInput<P> {
@@ -44,82 +93,27 @@ impl<P: OutputPlugin> MessageQueueInput<P> {
 
         Ok(Self {
             consumer: consumers,
-            message_router,
             task_limiter: TaskLimiter::new(config.task_limit()),
-            task_queue: Arc::new(ParallelTaskQueue::default()),
+            handler: MessageQueueHandler {
+                message_router,
+                task_queue: Arc::new(ParallelTaskQueue::default()),
+            },
         })
     }
 
-    async fn handle_message(
-        router: MessageRouter<P>,
-        message: Box<dyn CommunicationMessage>,
-    ) -> Result<(), Error> {
-        counter!("cdl.command-service.input-request", 1);
-
-        let generic_message = Self::build_message(message.as_ref())?;
-
-        trace!("Received message {:?}", generic_message);
-
-        router
-            .handle_message(generic_message)
-            .await
-            .map_err(Error::CommunicationError)?;
-
-        message.ack().await.map_err(Error::FailedToAcknowledge)?;
-
-        Ok(())
-    }
-
-    fn build_message(
-        message: &'_ dyn CommunicationMessage,
-    ) -> Result<BorrowedInsertMessage<'_>, Error> {
-        let json = message.payload().map_err(Error::MissingPayload)?;
-        let event: BorrowedInsertMessage =
-            serde_json::from_str(json).map_err(Error::PayloadDeserializationFailed)?;
-
-        Ok(event)
-    }
-
     pub async fn listen(self) -> Result<(), Error> {
-        let mut streams = Vec::new();
         trace!("Number of consumers: {}", self.consumer.len());
+
+        let mut futures = vec![];
         for consumer in self.consumer {
-            let consumer = consumer.leak(); // Limits ability to change queues CS is listening on without restarting whole service
-            let stream = consumer.consume().await;
-            streams.push(stream);
+            futures.push(consumer.par_run(self.handler.clone(), self.task_limiter.clone()));
         }
 
-        trace!("Beginning to listen on {} stream(s)", streams.len());
-
-        let message_stream = select_all(streams.into_iter().map(Box::pin));
-
-        pin!(message_stream);
-
-        trace!("Listen on message stream");
-        while let Some(message) = message_stream.next().await {
-            let router = self.message_router.clone();
-
-            let message = message
-                .map_err(Error::FailedReadingMessage)
-                .unwrap_or_else(|err| {
-                    error!("Failed to read message: {}", err);
-                    process::abort();
-                });
-
-            let task_queue = self.task_queue.clone();
-            self.task_limiter
-                .run(move || async move {
-                    let order_group_id = get_order_group_id(message.as_ref());
-                    let _guard = order_group_id.map(move |x| async move {
-                        task_queue.acquire_permit(x.to_string()).await
-                    });
-                    if let Err(err) = MessageQueueInput::handle_message(router, message).await {
-                        error!("Failed to handle message: {}", err);
-                        process::abort();
-                    }
-                })
-                .await;
+        if let Err(err) = try_join_all(futures).await {
+            error!("Failed to handle message: {}", err);
+            process::abort();
         }
+
         trace!("Stream closed");
 
         tokio::time::delay_for(tokio::time::Duration::from_secs(3)).await;

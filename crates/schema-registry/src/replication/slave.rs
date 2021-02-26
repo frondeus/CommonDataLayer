@@ -1,18 +1,39 @@
 use super::{MessageQueue, MessageQueueConfig, ReplicationEvent};
 use crate::db::SchemaDb;
 use anyhow::Context;
-use log::{error, info, trace};
+use async_trait::async_trait;
+use log::{error, trace};
 use std::{process, sync::Arc};
-use tokio::stream::StreamExt;
-use tokio::{pin, sync::oneshot::Receiver};
+use tokio::sync::oneshot::Receiver;
 use utils::messaging_system::{
-    consumer::CommonConsumer, consumer::CommonConsumerConfig, message::CommunicationMessage,
+    consumer::CommonConsumer,
+    consumer::{CommonConsumerConfig, ConsumerHandler},
+    message::CommunicationMessage,
 };
+
+struct Handler {
+    kill_signal: Receiver<()>,
+    db: Arc<SchemaDb>,
+}
+
+#[async_trait]
+impl ConsumerHandler for Handler {
+    async fn handle<'a>(&'a mut self, msg: &'a dyn CommunicationMessage) -> anyhow::Result<()> {
+        if self.kill_signal.try_recv().is_ok() {
+            anyhow::bail!("Slave replication disabled");
+        };
+        trace!("Received message");
+        if let Err(error) = consume_message(msg, &self.db).await {
+            error!("Error while processing message: {}", error);
+        }
+        Ok(())
+    }
+}
 
 pub async fn consume_mq(
     config: MessageQueueConfig,
     db: Arc<SchemaDb>,
-    mut kill_signal: Receiver<()>,
+    kill_signal: Receiver<()>,
 ) -> anyhow::Result<()> {
     let config = match &config.queue {
         MessageQueue::Kafka(kafka) => CommonConsumerConfig::Kafka {
@@ -27,30 +48,14 @@ pub async fn consume_mq(
             options: None,
         },
     };
-    let mut consumer = CommonConsumer::new(config).await.unwrap_or_else(|err| {
+    let consumer = CommonConsumer::new(config).await.unwrap_or_else(|err| {
         error!(
             "Fatal error. Encountered some problems connecting to kafka service. {:?}",
             err
         );
         process::abort();
     });
-    let message_stream = consumer.consume().await;
-    pin!(message_stream);
-    while let Some(message) = message_stream.next().await {
-        if kill_signal.try_recv().is_ok() {
-            info!("Slave replication disabled");
-            return Ok(());
-        };
-        trace!("Received message");
-        match message {
-            Err(error) => error!("Received malformed message: {}", error),
-            Ok(message) => {
-                if let Err(error) = consume_message(message.as_ref(), &db).await {
-                    error!("Error while processing message: {}", error);
-                }
-            }
-        }
-    }
+    consumer.run(Handler { db, kill_signal }).await?;
 
     Ok(())
 }
@@ -102,6 +107,5 @@ async fn consume_message(
         }
     };
 
-    message.ack().await?;
     Ok(())
 }

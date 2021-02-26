@@ -112,6 +112,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-stream 0.3.0",
+ "async-trait",
  "env_logger 0.8.3",
  "futures",
  "juniper",
@@ -736,6 +737,7 @@ name = "data-router"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "env_logger 0.8.3",
  "log",
  "lru-cache",
@@ -3061,6 +3063,7 @@ name = "schema-registry"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "chrono",
  "env_logger 0.8.3",
  "envy",
