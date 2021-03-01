@@ -1,5 +1,5 @@
 use crate::{
-    communication::config::{CommunicationConfig, MessageQueueConfig},
+    communication::config::CommunicationConfig,
     report::{Error, Reporter},
 };
 use log::{debug, trace};
@@ -42,14 +42,11 @@ impl FullReportSenderBase {
         output_plugin: String,
     ) -> Result<Self, Error> {
         let publisher = match communication_config {
-            CommunicationConfig::MessageQueue(MessageQueueConfig::Kafka { brokers, .. }) => {
-                CommonPublisher::new_kafka(brokers).await
-            }
-            CommunicationConfig::MessageQueue(MessageQueueConfig::Amqp {
-                connection_string,
-                ..
-            }) => CommonPublisher::new_amqp(connection_string).await,
-            CommunicationConfig::GRpc(_) => unreachable!(),
+            CommunicationConfig::Kafka { brokers, .. } => CommonPublisher::new_kafka(brokers).await,
+            CommunicationConfig::Amqp {
+                connection_string, ..
+            } => CommonPublisher::new_amqp(connection_string).await,
+            CommunicationConfig::Grpc { .. } => unreachable!(),
         };
 
         debug!(

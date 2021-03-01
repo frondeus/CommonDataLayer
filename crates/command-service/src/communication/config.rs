@@ -1,12 +1,8 @@
+use std::net::{Ipv4Addr, SocketAddrV4};
+
 use utils::messaging_system::consumer::{BasicConsumeOptions, CommonConsumerConfig};
 
 pub enum CommunicationConfig {
-    MessageQueue(MessageQueueConfig),
-    GRpc(GRpcConfig),
-}
-
-#[derive(Clone, Debug)]
-pub enum MessageQueueConfig {
     Kafka {
         brokers: String,
         group_id: String,
@@ -21,13 +17,18 @@ pub enum MessageQueueConfig {
         unordered_queue_names: Vec<String>,
         task_limit: usize,
     },
+    Grpc {
+        grpc_port: u16,
+        task_limit: usize,
+    },
 }
 
-impl MessageQueueConfig {
+impl CommunicationConfig {
     pub fn task_limit(&self) -> usize {
         match self {
-            MessageQueueConfig::Kafka { task_limit, .. } => *task_limit,
-            MessageQueueConfig::Amqp { task_limit, .. } => *task_limit,
+            CommunicationConfig::Kafka { task_limit, .. } => *task_limit,
+            CommunicationConfig::Amqp { task_limit, .. } => *task_limit,
+            CommunicationConfig::Grpc { task_limit, .. } => *task_limit,
         }
     }
 
@@ -35,7 +36,7 @@ impl MessageQueueConfig {
         &'a self,
     ) -> Box<dyn Iterator<Item = CommonConsumerConfig<'a>> + 'a> {
         match self {
-            MessageQueueConfig::Kafka {
+            CommunicationConfig::Kafka {
                 brokers,
                 group_id,
                 ordered_topics,
@@ -50,7 +51,7 @@ impl MessageQueueConfig {
                     });
                 Box::new(iter)
             }
-            MessageQueueConfig::Amqp {
+            CommunicationConfig::Amqp {
                 consumer_tag,
                 connection_string,
                 ordered_queue_names,
@@ -71,6 +72,7 @@ impl MessageQueueConfig {
                         });
                 Box::new(iter)
             }
+            CommunicationConfig::Grpc { .. } => Box::new(std::iter::empty()),
         }
     }
 
@@ -78,7 +80,7 @@ impl MessageQueueConfig {
         &'a self,
     ) -> Box<dyn Iterator<Item = CommonConsumerConfig<'a>> + 'a> {
         match self {
-            MessageQueueConfig::Kafka {
+            CommunicationConfig::Kafka {
                 brokers,
                 group_id,
                 unordered_topics,
@@ -93,7 +95,7 @@ impl MessageQueueConfig {
                     });
                 Box::new(iter)
             }
-            MessageQueueConfig::Amqp {
+            CommunicationConfig::Amqp {
                 consumer_tag,
                 connection_string,
                 unordered_queue_names,
@@ -113,11 +115,11 @@ impl MessageQueueConfig {
                 });
                 Box::new(iter)
             }
+            CommunicationConfig::Grpc { grpc_port, .. } => {
+                let addr = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), *grpc_port);
+                let iter = std::iter::once(CommonConsumerConfig::Grpc { addr });
+                Box::new(iter)
+            }
         }
     }
-}
-
-#[derive(Clone, Debug)]
-pub struct GRpcConfig {
-    pub grpc_port: u16,
 }

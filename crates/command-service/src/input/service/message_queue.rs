@@ -1,6 +1,6 @@
 use crate::output::OutputPlugin;
 use crate::{
-    communication::{config::MessageQueueConfig, MessageRouter},
+    communication::{config::CommunicationConfig, MessageRouter},
     input::Error,
 };
 use async_trait::async_trait;
@@ -73,7 +73,7 @@ impl<P: OutputPlugin> MessageQueueHandler<P> {
 
 impl<P: OutputPlugin> MessageQueueInput<P> {
     pub async fn new(
-        config: MessageQueueConfig,
+        config: CommunicationConfig,
         message_router: MessageRouter<P>,
     ) -> Result<Self, Error> {
         let mut consumers = Vec::new();

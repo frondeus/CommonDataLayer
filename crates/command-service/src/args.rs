@@ -1,4 +1,4 @@
-use crate::communication::config::{CommunicationConfig, GRpcConfig, MessageQueueConfig};
+use crate::communication::config::CommunicationConfig;
 use crate::output::OutputArgs;
 use crate::report::ReportServiceConfig;
 use structopt::clap::arg_enum;
@@ -92,7 +92,7 @@ impl Args {
                     return Err(MissingConfigError("Queue names"));
                 }
 
-                let config = match communication_args.communication_method {
+                match communication_args.communication_method {
                     CommunicationMethod::Amqp => {
                         let consumer_tag = communication_args
                             .amqp_consumer_tag
@@ -103,7 +103,7 @@ impl Args {
                                 .amqp_connection_string
                                 .clone()
                                 .ok_or(MissingConfigError("AMQP connection string"))?;
-                        MessageQueueConfig::Amqp {
+                        CommunicationConfig::Amqp {
                             connection_string,
                             consumer_tag,
                             ordered_queue_names: ordered_topics_or_queues,
@@ -120,7 +120,7 @@ impl Args {
                             .kafka_group_id
                             .clone()
                             .ok_or(MissingConfigError("Kafka group"))?;
-                        MessageQueueConfig::Kafka {
+                        CommunicationConfig::Kafka {
                             brokers,
                             group_id,
                             ordered_topics: ordered_topics_or_queues,
@@ -129,15 +129,14 @@ impl Args {
                         }
                     }
                     _ => unreachable!(),
-                };
-
-                CommunicationConfig::MessageQueue(config)
+                }
             }
-            CommunicationMethod::GRpc => CommunicationConfig::GRpc(GRpcConfig {
+            CommunicationMethod::GRpc => CommunicationConfig::Grpc {
+                task_limit: communication_args.task_limit,
                 grpc_port: communication_args
                     .grpc_port
                     .ok_or(MissingConfigError("GRPC port"))?,
-            }),
+            },
         })
     }
 }
