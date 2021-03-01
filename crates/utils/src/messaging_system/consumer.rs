@@ -1,3 +1,4 @@
+use crate::task_limiter::TaskLimiter;
 use anyhow::Context;
 use async_trait::async_trait;
 use futures_util::TryStreamExt;
@@ -7,14 +8,15 @@ use rdkafka::{
     consumer::{DefaultConsumerContext, StreamConsumer},
     ClientConfig,
 };
-use std::sync::Arc;
+use rpc::generic as proto;
+use rpc::generic::generic_rpc_server::GenericRpc;
+use rpc::generic::generic_rpc_server::GenericRpcServer;
+use std::{net::SocketAddrV4, sync::Arc};
 use tokio_amqp::LapinTokioExt;
-
-use crate::task_limiter::TaskLimiter;
 
 use super::{
     kafka_ack_queue::KafkaAckQueue, message::AmqpCommunicationMessage,
-    message::CommunicationMessage, message::KafkaCommunicationMessage, Result,
+    message::CommunicationMessage, message::KafkaCommunicationMessage, Error, Result,
 };
 
 #[async_trait]
@@ -25,6 +27,28 @@ pub trait ConsumerHandler {
 #[async_trait]
 pub trait ParConsumerHandler: Send + Sync + 'static {
     async fn handle<'a>(&'a self, msg: &'a dyn CommunicationMessage) -> anyhow::Result<()>;
+}
+
+struct GenericRpcImpl<T> {
+    handler: Arc<T>,
+}
+
+#[tonic::async_trait]
+impl<T> GenericRpc for GenericRpcImpl<T>
+where
+    T: ParConsumerHandler,
+{
+    async fn handle(
+        &self,
+        request: tonic::Request<proto::Message>,
+    ) -> Result<tonic::Response<proto::Empty>, tonic::Status> {
+        let msg = request.into_inner();
+
+        match self.handler.handle(&msg).await {
+            Ok(_) => Ok(tonic::Response::new(proto::Empty {})),
+            Err(err) => Err(tonic::Status::internal(err.to_string())),
+        }
+    }
 }
 
 pub enum CommonConsumerConfig<'a> {
@@ -39,6 +63,9 @@ pub enum CommonConsumerConfig<'a> {
         queue_name: &'a str,
         options: Option<BasicConsumeOptions>,
     },
+    Grpc {
+        addr: SocketAddrV4,
+    },
 }
 pub enum CommonConsumer {
     Kafka {
@@ -47,6 +74,9 @@ pub enum CommonConsumer {
     },
     Amqp {
         consumer: lapin::Consumer,
+    },
+    Grpc {
+        addr: SocketAddrV4,
     },
 }
 impl CommonConsumer {
@@ -63,6 +93,7 @@ impl CommonConsumer {
                 queue_name,
                 options,
             } => Self::new_amqp(connection_string, consumer_tag, queue_name, options).await,
+            CommonConsumerConfig::Grpc { addr } => Ok(Self::Grpc { addr }),
         }
     }
 
@@ -111,6 +142,9 @@ impl CommonConsumer {
         Ok(CommonConsumer::Amqp { consumer })
     }
 
+    /// Process messages in order. Cannot be used with Grpc.
+    /// # Error handling
+    /// Program exits on first unhandled message. I may cause crash-loop.
     pub async fn run(self, mut handler: impl ConsumerHandler) -> Result<()> {
         match self {
             CommonConsumer::Kafka {
@@ -127,6 +161,7 @@ impl CommonConsumer {
                         }
                         Err(e) => {
                             log::error!("Couldn't process message: {:?}", e);
+                            std::process::abort();
                         }
                     }
                 }
@@ -142,9 +177,14 @@ impl CommonConsumer {
                         }
                         Err(e) => {
                             log::error!("Couldn't process message: {:?}", e);
+                            std::process::abort();
                         }
                     }
                 }
+            }
+            CommonConsumer::Grpc { .. } => {
+                // Use par_run instead
+                return Err(Error::GrpcNotSupported);
             }
         }
         Ok(())
@@ -153,6 +193,11 @@ impl CommonConsumer {
     /// Process messages in parallel
     /// # Memory safety
     /// This method leaks kafka consumer
+    /// # Error handling
+    /// ## Kafka & AMQP
+    /// Program exits on first unhandled message. I may cause crash-loop.
+    /// ## GRPC
+    /// Program returns 500 code and tries to handle further messages.
     pub async fn par_run(
         self,
         handler: impl ParConsumerHandler,
@@ -182,6 +227,7 @@ impl CommonConsumer {
                                 }
                                 Err(e) => {
                                     log::error!("Couldn't process message: {:?}", e);
+                                    std::process::abort();
                                 }
                             }
                         })
@@ -209,11 +255,18 @@ impl CommonConsumer {
                                 }
                                 Err(e) => {
                                     log::error!("Couldn't process message: {:?}", e);
+                                    std::process::abort();
                                 }
                             }
                         })
                         .await;
                 }
+            }
+            CommonConsumer::Grpc { addr } => {
+                tonic::transport::Server::builder()
+                    .add_service(GenericRpcServer::new(GenericRpcImpl { handler }))
+                    .serve(addr.into())
+                    .await?;
             }
         }
         Ok(())

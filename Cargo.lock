@@ -4219,6 +4219,7 @@ dependencies = [
  "metrics-observer-prometheus",
  "metrics-runtime",
  "rdkafka",
+ "rpc",
  "serde",
  "serde_json",
  "structopt",

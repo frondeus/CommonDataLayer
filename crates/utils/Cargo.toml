@@ -12,6 +12,10 @@ name = "utils"
 path = "src/lib.rs"
 
 [dependencies]
+# Workspace
+rpc         = { path    = "../rpc" }
+
+# Crates.io
 anyhow      = "1.0"
 async-trait = "0.1"
 hyper       = "0.13"

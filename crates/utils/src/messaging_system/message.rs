@@ -1,11 +1,9 @@
 use anyhow::Context;
-use async_trait::async_trait;
 use lapin::message::Delivery;
 use rdkafka::{message::BorrowedMessage, Message};
 
 use super::Result;
 
-#[async_trait]
 pub trait CommunicationMessage: Send + Sync {
     fn payload(&self) -> Result<&str>;
     fn key(&self) -> Result<&str>;
@@ -14,7 +12,6 @@ pub trait CommunicationMessage: Send + Sync {
 pub struct KafkaCommunicationMessage<'a> {
     pub(super) message: BorrowedMessage<'a>,
 }
-#[async_trait]
 impl<'a> CommunicationMessage for KafkaCommunicationMessage<'a> {
     fn key(&self) -> Result<&str> {
         let key = self
@@ -34,7 +31,6 @@ impl<'a> CommunicationMessage for KafkaCommunicationMessage<'a> {
 pub struct AmqpCommunicationMessage {
     pub(super) delivery: Delivery,
 }
-#[async_trait]
 impl CommunicationMessage for AmqpCommunicationMessage {
     fn key(&self) -> Result<&str> {
         let key = self.delivery.routing_key.as_str();
@@ -42,5 +38,15 @@ impl CommunicationMessage for AmqpCommunicationMessage {
     }
     fn payload(&self) -> Result<&str> {
         Ok(std::str::from_utf8(&self.delivery.data).context("Payload was not valid UTF-8")?)
+    }
+}
+
+impl CommunicationMessage for rpc::generic::Message {
+    fn payload(&self) -> Result<&str> {
+        Ok(&self.key)
+    }
+
+    fn key(&self) -> Result<&str> {
+        Ok(std::str::from_utf8(&self.payload)?)
     }
 }

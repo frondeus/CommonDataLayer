@@ -11,15 +11,23 @@ pub mod metadata_fetcher;
 
 #[derive(Clone, Debug, DeriveError)]
 pub enum Error {
-    #[error("Error during communication via message queue \"{0}\"")]
+    #[error("Error during communication \"{0}\"")]
     CommunicationError(String),
 
     #[error("Error during joining blocking task \"{0}\"")]
     RuntimeError(String),
+
+    #[error("GRPC communication method is not supported")]
+    GrpcNotSupported,
 }
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
+impl From<tonic::transport::Error> for Error {
+    fn from(error: tonic::transport::Error) -> Self {
+        Self::CommunicationError(error.to_string())
+    }
+}
 impl From<rdkafka::error::KafkaError> for Error {
     fn from(error: rdkafka::error::KafkaError) -> Self {
         Self::CommunicationError(error.to_string())
