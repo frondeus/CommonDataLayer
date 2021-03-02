@@ -53,6 +53,11 @@ impl From<tokio::task::JoinError> for Error {
         Self::RuntimeError(error.to_string())
     }
 }
+impl From<reqwest::Error> for Error {
+    fn from(error: reqwest::Error) -> Self {
+        Self::CommunicationError(error.to_string())
+    }
+}
 
 pub fn get_order_group_id(message: &dyn CommunicationMessage) -> Option<String> {
     message

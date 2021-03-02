@@ -3,8 +3,10 @@ use rdkafka::{
     producer::{FutureProducer, FutureRecord},
     ClientConfig,
 };
+use reqwest::Client;
 use std::time::Duration;
 use tokio_amqp::LapinTokioExt;
+use url::Url;
 
 use super::Result;
 
@@ -12,6 +14,7 @@ use super::Result;
 pub enum CommonPublisher {
     Kafka { producer: FutureProducer },
     Amqp { channel: Channel },
+    Rest { url: Url, client: Client },
 }
 impl CommonPublisher {
     pub async fn new_amqp(connection_string: &str) -> Result<CommonPublisher> {
@@ -35,6 +38,13 @@ impl CommonPublisher {
             .create()?;
         Ok(CommonPublisher::Kafka {
             producer: publisher,
+        })
+    }
+
+    pub async fn new_rest(url: Url) -> Result<CommonPublisher> {
+        Ok(CommonPublisher::Rest {
+            url,
+            client: reqwest::Client::new(),
         })
     }
 
@@ -66,6 +76,13 @@ impl CommonPublisher {
                     )
                     .await?
                     .await?;
+                Ok(())
+            }
+            CommonPublisher::Rest { url, client } => {
+                let url = url.join(&format!("{}/{}", topic_or_exchange, key)).unwrap();
+
+                client.post(url).body(payload).send().await?;
+
                 Ok(())
             }
         }
