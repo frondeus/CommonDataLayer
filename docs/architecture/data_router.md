@@ -62,14 +62,39 @@ Please mind that internally, each message will get its own timestamp, with which
 To configure data router, set following environment variables. `INPUT_ADDR` and `INPUT_QUEUE` is related to the incoming data in the router. `KAFKA_BROKERS`, `KAFKA_ERROR_CHANNEL` are related to messages being routed through Kafka to the corresponding command service.
 
 
-```
-INPUT_ADDR
-INPUT_QUEUE
-KAFKA_BROKERS
-KAFKA_ERROR_CHANNEL
-SCHEMA_REGISTRY_ADDR
-CACHE_CAPACITY
-```
+| Name | Short Description | Example | Mandatory | Default |
+|---|---|---|---|---|
+| COMMUNICATION_METHOD | The method to communicate with external services | `kafka` / `amqp` / `grpc` | yes | |
+| INPUT_SOURCE | kafka topic or amqp queue | `cdl.data.input` | no, when `grpc` has been chosen | |
+| SCHEMA_REGISTRY_ADDR | Address of setup schema registry | http://schema_registry:50101 | yes | |
+| CACHE_CAPACITY | How many entries the cache can hold | 1024 | yes | |
+| TASK_LIMIT | limits the number of tasks | 128 | yes | 128 |
+| METRICS_PORT | Port to listen on prometheus requests | 58105 | no | 58105 |
+| RUST_LOG | Log level | `trace` | no | |
+
+#### Kafka configuration 
+(if `COMMUNICATION_METHOD` equals `kafka`)
+
+| Name | Short Description | Example | Mandatory | Default |
+|---|---|---|---|---|
+| KAFKA_BROKERS | Address to kafka brokers | `kafka:9093` | yes | |
+| KAFKA_GROUP_ID | Group id of the consumer | `data_router` | yes | |
+
+#### Amqp configuration 
+(if `COMMUNICATION_METHOD` equals `amqp`)
+
+| Name | Short Description | Example | Mandatory | Default |
+|---|---|---|---|---|
+| AMQP_CONNECTION_STRING | Connection string to AMQP Server | `amqp://user:CHANGEME@rabbitmq:5672/%2f` | yes | |
+| AMQP_CONSUMER_TAG | Consumer tag | `data_router` | yes | |
+
+#### GRPC configuration 
+(if `COMMUNICATION_METHOD` equals `grpc`)
+
+| Name | Short Description | Example | Mandatory | Default |
+|---|---|---|---|---|
+|
+| GRPC_PORT | Port to listen on | 50103 | yes | |
 
 Mind that GRPC uses HTTP2 as its transport protocol (L4), so SCHEMA_REGISTRY_ADDR must be provided as `http://ip_or_name:port`
 
