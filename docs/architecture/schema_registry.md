@@ -18,45 +18,43 @@ Query methods:
 Communication methods (supported repositores):
 - Kafka (with other schema-registry instances)
 
-### Configuration
+### Configuration (Environment Variables)
 
-Basic values used by SR
+| Name                 | Short Description                                                                                                | Example                       | Mandatory | Default |
+|----------------------|------------------------------------------------------------------------------------------------------------------|-------------------------------|-----------|---------|
+| INPUT_PORT           | Port to listen on                                                                                                | 50103                         | yes       |         |
+| COMMUNICATION_METHOD | The method to communicate with external services                                                                 | `kafka` / `amqp` / `grpc`     | yes       |         |
+| REPLICATION_ROLE     | (deprecated)                                                                                                     | `master` / `slave` / `none`   | yes       |         |
+| DB_NAME              | Database name                                                                                                    | `schema-registry`             | yes       |         |
+| POD_NAME             | (deprecated) used to promote to `master`                                                                         | `schema1`                     | no        |         |
+| EXPORT_DIR           | Directory to save state of the database. The state is saved in newly created folder with timestamp               | `/var/db`                     | no        |         |
+| IMPORT_FILE          | JSON file from which SR should load initial state. If the state already exists this env variable will be ignored | `/var/db/initial-schema.json` | no        |         |
+| METRICS_PORT         | Port to send metrics data to Prometheus over                                                                     | 58105                         | no        | 58105   |
+| RUST_LOG             | Log level                                                                                                        | `trace`                       | no        |         |
 
-| Name | Short Description | Example | Mandatory | Default |
-|---|---|---|---|---|
-| INPUT_PORT | Port to listen on | 50103 | yes | |
-| COMMUNICATION_METHOD | The method to communicate with external services | `kafka` / `amqp` / `grpc` | yes | |
-| REPLICATION_ROLE | (deprecated) | `master` / `slave` / `none` | yes | |
-| DB_NAME | Database name | `schema-registry` | yes | |
-| POD_NAME | (deprecated) used to promote to `master` | `schema1` | no | |
-| EXPORT_DIR | Directory to save state of the database. The state is saved in newly created folder with timestamp | `/var/db` | no | |
-| IMPORT_FILE | JSON file from which SR should load initial state. If the state already exists this env variable will be ignored | `/var/db/initial-schema.json` | no | |
-| METRICS_PORT | Port to listen on prometheus requests | 58105 | no | 58105 |
-| RUST_LOG | Log level | `trace` | no | |
+#### Kafka Configuration 
+*(if `COMMUNICATION_METHOD` equals `kafka`)*
 
-#### Kafka configuration 
-(if `COMMUNICATION_METHOD` equals `kafka`)
+| Name           | Short Description        | Example           | Mandatory | Default |
+|----------------|--------------------------|-------------------|-----------|---------|
+| KAFKA_BROKERS  | Address of Kafka brokers | `kafka:9093`      | yes       |         |
+| KAFKA_GROUP_ID | Group ID of the consumer | `schema_registry` | yes       |         |
 
-| Name | Short Description | Example | Mandatory | Default |
-|---|---|---|---|---|
-| KAFKA_BROKERS | Address to kafka brokers | `kafka:9093` | yes | |
-| KAFKA_GROUP_ID | Group id of the consumer | `schema_registry` | yes | |
+#### AMQP Configuration 
+*(if `COMMUNICATION_METHOD` equals `amqp`)*
 
-#### Amqp configuration 
-(if `COMMUNICATION_METHOD` equals `amqp`)
+| Name                   | Short Description             | Example                                  | Mandatory | Default |
+|------------------------|-------------------------------|------------------------------------------|-----------|---------|
+| AMQP_CONNECTION_STRING | Connection URL to AMQP Server | `amqp://user:CHANGEME@rabbitmq:5672/%2f` | yes       |         |
+| AMQP_CONSUMER_TAG      | Consumer tag                  | `schema_registry`                        | yes       |         |
 
-| Name | Short Description | Example | Mandatory | Default |
-|---|---|---|---|---|
-| AMQP_CONNECTION_STRING | Connection string to AMQP Server | `amqp://user:CHANGEME@rabbitmq:5672/%2f` | yes | |
-| AMQP_CONSUMER_TAG | Consumer tag | `schema_registry` | yes | |
+#### Replication Configuration 
+*(if `COMMUNICATION_METHOD` does NOT equal `grpc`)*
 
-#### Replication configuration 
-(if `COMMUNICATION_METHOD` does **not** equal `grpc`)
-
-| Name | Short Description | Example | Mandatory | Default |
-|---|---|---|---|---|
-| REPLICATION_SOURCE | kafka topic/amqp queue | `cdl.schema_registry.internal` | yes | |
-| REPLICATION_DESTINATION | kafka topic/amqp exchange | `cdl.schema_registry.internal` | yes | |
+| Name                    | Short Description         | Example                        | Mandatory | Default |
+|-------------------------|---------------------------|--------------------------------|-----------|---------|
+| REPLICATION_SOURCE      | Kafka topic/AMQP queue    | `cdl.schema_registry.internal` | yes       |         |
+| REPLICATION_DESTINATION | Kafka topic/AMQP exchange | `cdl.schema_registry.internal` | yes       |         |
 
 Mind that GRPC uses HTTP2 as its transport protocol (L4), so SCHEMA_REGISTRY_ADDR must be provided as `http://ip_or_name:port`
 
